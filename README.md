@@ -10,7 +10,7 @@ Excel/CSVファイルの機械可読性を診断するためのWebアプリケ�
 - レポートの生成と保存
 
 ### 診断項目
-[データの機械可読性を高めるための新しいルールのイメージ](https://www.cas.go.jp/jp/seisaku/digital_gyozaikaikaku/data8/data8_siryou1.pdf)の7ページ
+[官民におけるデータの利活用について（内閣官房）](https://www.cas.go.jp/jp/seisaku/digital_gyozaikaikaku/data8/data8_siryou1.pdf)の7ページにあるデータの機械可読性を高めるための新しいルールのイメージ
 
 ## 必要条件
 
