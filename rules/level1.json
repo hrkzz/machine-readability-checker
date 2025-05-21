@@ -1,0 +1,53 @@
+[
+    {
+      "id": "1-01",
+      "description": "オブジェクトや画像を使わない",
+      "function": "check_no_images_or_objects"
+    },
+    {
+      "id": "1-02",
+      "description": "書式でデータの違いを表現しない（網掛けなど）",
+      "function": "check_no_format_based_semantics"
+    },
+    {
+      "id": "1-03",
+      "description": "セルを結合しない",
+      "function": "check_no_merged_cells"
+    },
+    {
+      "id": "1-04",
+      "description": "ファイル形式はExcelかCSV",
+      "function": "check_valid_file_format"
+    },
+    {
+      "id": "1-05",
+      "description": "1セルに1データしか入れない",
+      "function": "check_single_data_per_cell"
+    },
+    {
+      "id": "1-06",
+      "description": "スペースや改行で体裁を整えない",
+      "function": "check_no_whitespace_formatting"
+    },
+    {
+      "id": "1-07",
+      "description": "1シートに1つの表を入れる",
+      "function": "check_one_table_per_sheet"
+    },
+    {
+      "id": "1-08",
+      "description": "行や列を非表示にしない",
+      "function": "check_no_hidden_rows_or_columns"
+    },
+    {
+      "id": "1-09",
+      "description": "表の外側にメモや備考を記載しない",
+      "function": "check_no_notes_outside_table"
+    },
+    {
+      "id": "1-10",
+      "description": "機種依存文字を使わない",
+      "function": "check_no_platform_dependent_characters"
+    }
+  ]
+  

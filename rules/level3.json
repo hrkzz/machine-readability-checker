@@ -1,0 +1,28 @@
+[
+    {
+      "id": "3-01",
+      "description": "選択肢回答をコード表記にしている",
+      "function": "check_code_format_for_choices"
+    },
+    {
+      "id": "3-02",
+      "description": "回答のコード表を別添している",
+      "function": "check_codebook_exists"
+    },
+    {
+      "id": "3-03",
+      "description": "設問マスター（列・変数）を別添している",
+      "function": "check_question_master_exists"
+    },
+    {
+      "id": "3-04",
+      "description": "調査概要や単位・備考などのメタデータが添付されている",
+      "function": "check_metadata_presence"
+    },
+    {
+      "id": "3-05",
+      "description": "列数が多い場合は縦型のレイアウトにしている",
+      "function": "check_long_format_if_many_columns"
+    }
+  ]
+  

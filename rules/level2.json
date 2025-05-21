@@ -1,0 +1,23 @@
+[
+    {
+      "id": "2-01",
+      "description": "数値列には数値しか入れない",
+      "function": "check_numeric_columns_only"
+    },
+    {
+      "id": "2-02",
+      "description": "選択肢列と「その他」の詳細記入を分ける",
+      "function": "check_separate_other_detail_columns"
+    },
+    {
+      "id": "2-03",
+      "description": "表側の項目名を省略しない",
+      "function": "check_no_missing_column_headers"
+    },
+    {
+      "id": "2-04",
+      "description": "回答なし（空欄）の扱いを定める",
+      "function": "check_handling_of_missing_values"
+    }
+  ]
+  
