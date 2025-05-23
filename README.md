@@ -5,7 +5,6 @@ Excel/CSVファイルの機械可読性を診断するためのWebアプリケ�
 ## 機能
 
 - Excel/CSVファイルのアップロードと診断
-- レベル1の診断項目（10項目）のチェック
 - 診断結果の詳細表示
 - レポートの生成と保存
 
@@ -60,13 +59,17 @@ machine_readability_checker/
 │   ├── config.py           # 設定ファイル
 │   ├── checker/            # チェック機能
 │   │   ├── level1_checks.py
-│   │   └── utils.py
+│   │   ├── level2_checks.py
+│   │ 　├── level3_checks.py
+│   │   └──  utils.py
 │   ├── processor/          # データ処理
 │   │   └── loader.py
 │   └── llm/               # LLM関連
 │       └── column_meaning.py
 ├── rules/                 # ルール定義
-│   └── level1.json
+│   ├── level1.json
+│   ├── level2.json
+│   └── level3.json
 ├── data/                  # 一時ファイル保存
 ├── reports/              # レポート出力
 ├── requirements.txt      # 依存パッケージ
