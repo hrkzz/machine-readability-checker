@@ -40,7 +40,7 @@ def get_hidden_rows_columns(worksheet) -> Tuple[List[int], List[str]]:
     return hidden_rows, hidden_cols
 
 def detect_platform_characters(text: str) -> bool:
-    pattern = re.compile(r"[①-⑳⓪-⓿Ⅰ-Ⅻ㊤㊥㊦㊧㊨㈱㈲㈹℡〒]")
+    pattern = re.compile(r"[①-⑳⓪-⓿Ⅰ-Ⅻ㊤㊥㊦㊧㊨㈱㈲㈹℡〒〓※]")
     return bool(pattern.search(text))
 
 def detect_notes_outside_table(texts: List[str]) -> str:
@@ -81,3 +81,65 @@ def is_sheet_likely(sheet_title: str, category: str, sheet=None) -> bool:
             return False
 
     return True
+
+def infer_column_header_rows(df, max_rows=10, call_llm=None):
+    """
+    DataFrameの上部から、何行がカラム名かを LLM + ヒューリスティックで判定。
+    """
+    if call_llm is None:
+        raise ValueError("call_llm 関数を渡してください")
+
+    # LLMに渡す表の文字列を構成
+    lines = df.head(max_rows).fillna("").astype(str).values.tolist()
+    text_table = "\n".join(["\t".join(row) for row in lines])
+
+    # プロンプト
+    prompt = f"""
+            以下は、Excelの表の先頭{max_rows}行をテキスト形式に変換したものです。
+            この表の「上から何行がカラム名（列見出し）」として扱われるべきかを判定してください。
+
+            【カラム名とは】
+            - 各列の意味や単位、カテゴリ、年などを記述した「見出し」部分です
+            - その下に続くのは通常、数値や選択肢などの「データ行」です
+            - データ行には個人名、金額、選択肢、数値などが含まれます
+
+            【判断基準】
+            - 意味の説明や単位が書かれている行 → カラム名
+            - 数値、漢字氏名、金額、選択肢など → データ行（≠カラム名）
+
+            【出力形式（厳守）】
+            カラム名は上からN行までです
+
+            【表データ】
+            {text_table}
+"""
+
+    response = call_llm(prompt)
+
+    # 結果から "N行" を抽出（誤字耐性付き）
+    match = re.search(r"(\d+)\s*行", response)
+    if match:
+        n = int(match.group(1))
+
+        # LLMの判定が明らかにおかしいケースの保険
+        if 1 <= n <= max_rows:
+            return n
+
+    # フォールバック：人間的なヒューリスティック
+    likely_header_row = 1
+    for i in range(1, min(4, len(df))):
+        row = df.iloc[i]
+        # 数値が多ければデータ本体と見なす
+        num_values = row.apply(lambda x: isinstance(x, (int, float)) or str(x).replace(",", "").isdigit()).sum()
+        if num_values >= len(row) * 0.6:
+            likely_header_row = i
+            break
+
+    return likely_header_row
+
+def get_excel_column_letter(n):
+    result = ""
+    while n > 0:
+        n, remainder = divmod(n - 1, 26)
+        result = chr(65 + remainder) + result
+    return result

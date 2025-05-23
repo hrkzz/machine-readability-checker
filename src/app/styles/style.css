@@ -1,0 +1,71 @@
+/* 全体のフォントと背景 */
+body {
+    background-color: #f5f7fa;
+    font-family: 'Segoe UI', sans-serif;
+    color: #2c3e50;
+}
+
+/* タイトル */
+h1 {
+    color: #1f77b4;
+    font-weight: bold;
+    border-bottom: 2px solid #ddd;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+/* セクション見出し */
+h2, h3 {
+    color: #34495e;
+}
+
+/* 共通ボタンスタイル（stButton, stDownloadButton） */
+.stButton>button,
+.stDownloadButton>button {
+    background-color: white;
+    color: #2c3e50;
+    font-weight: bold;
+    padding: 8px 16px;
+    border: 2px solid #2c3e50;
+    border-radius: 6px;
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* ホバー時 */
+.stButton>button:hover,
+.stDownloadButton>button:hover {
+    background-color: #e0e0e0;
+    color: #2c3e50; /* 赤化防止 */
+    border-color: #1f77b4;
+}
+
+/* アクティブ時（クリック中） */
+.stButton>button:active,
+.stDownloadButton>button:active {
+    background-color: #d0d0d0;
+    color: #2c3e50; /* 赤化防止 */
+    border-color: #1f77b4;
+}
+
+/* チェック結果の項目 */
+.stMarkdown {
+    font-size: 15px;
+    line-height: 1.7;
+}
+
+/* 折りたたみヘッダー */
+.stExpanderHeader {
+    font-weight: bold;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+/* テキスト入力やアップローダー枠 */
+input,
+.stTextInput,
+.stFileUploader {
+    background-color: #ffffff;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 8px;
+}

@@ -1,7 +1,5 @@
 import streamlit as st
-import pandas as pd
 import json
-from pathlib import Path
 import datetime
 from processor.loader import load_file
 from checker.level1_checks import (
@@ -11,7 +9,6 @@ from checker.level1_checks import (
     check_clear_column_names,
     check_no_empty_rows_columns
 )
-from llm.llm_client import analyze_column_meaning, analyze_notes
 from config import DATA_DIR, REPORTS_DIR, RULES_DIR
 
 # ページ設定
@@ -104,12 +101,12 @@ if uploaded_file is not None:
         report_path = REPORTS_DIR / f"report_{timestamp}.md"
         
         with open(report_path, "w", encoding="utf-8") as f:
-            f.write(f"# 機械可読性診断レポート\n\n")
+            f.write("# 機械可読性診断レポート\n\n")
             f.write(f"診断日時: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"ファイル名: {uploaded_file.name}\n\n")
-            f.write(f"## サマリー\n")
+            f.write("## サマリー\n")
             f.write(f"- 合格項目: {passed_count}/{total_count} ({passed_count/total_count*100:.1f}%)\n\n")
-            f.write(f"## 詳細結果\n")
+            f.write("## 詳細結果\n")
             
             for result in results:
                 rule = result["rule"]
