@@ -1,56 +1,52 @@
+from pathlib import Path
+from typing import Dict, Any
 import pandas as pd
 import openpyxl
-from pathlib import Path
-from typing import Tuple, Dict, Any, List, Optional
-from openpyxl.worksheet.worksheet import Worksheet
 
-# サポートされる拡張子
-ALLOWED_EXTENSIONS = {".xlsx", ".xls", ".csv"} 
+# 対応可能な拡張子（旧形式 .xls は除外）
+ALLOWED_EXTENSIONS = {".xlsx", ".csv"}
 
-def load_file(file_path: Path) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+def load_file(file_path: Path) -> Dict[str, Any]:
     """
-    ファイルを読み込み、DataFrameとメタデータを返す
+    ファイルを読み込み、各シートのデータ（先頭・末尾10行）を返す。
+    loader はあくまで「生のテーブル情報」を提供し、オブジェクト検出などは
+    checker 側のユーティリティに委ねます。
     """
-    if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-        raise ValueError(f"Unsupported file format. Allowed formats: {ALLOWED_EXTENSIONS}")
-    
-    metadata: Dict[str, Any] = {}
+    suffix = file_path.suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise ValueError(f"Unsupported file format: {suffix}")
 
-    if file_path.suffix.lower() in {".xlsx", ".xls"}:
+    result: Dict[str, Any] = {
+        "file_path": file_path,
+        "file_type": suffix,
+        "sheets": []
+    }
+
+    if suffix == ".csv":
+        # CSV は単一の「シート」と見なし、ヘッダーなしで読み込む
+        df = pd.read_csv(file_path, header=None)
+        result["sheets"].append({
+            "sheet_name": "CSV",
+            "dataframe": df,
+            "preview_top": df.head(10),
+            "preview_bottom": df.tail(10),
+        })
+    else:
+        # .xlsx
         wb = openpyxl.load_workbook(file_path, data_only=True)
-        ws: Optional[Worksheet] = wb.active if wb.worksheets else None
-        
-        if ws is not None:
-            metadata["worksheet"] = ws
-            metadata["merged_cells"] = list(ws.merged_cells.ranges)
-            metadata["hidden_rows"], metadata["hidden_cols"] = get_hidden_rows_columns(ws)
-        else:
-            metadata["worksheet"] = None
-            metadata["merged_cells"] = []
-            metadata["hidden_rows"] = []
-            metadata["hidden_cols"] = []
+        for ws in wb.worksheets:
+            try:
+                # ヘッダーは後で LLM が判定するため、ここでは header=None
+                df = pd.read_excel(file_path, sheet_name=ws.title, header=None)
+            except Exception:
+                # 読み込みに失敗した場合は空 DataFrame
+                df = pd.DataFrame()
 
-        df = pd.read_excel(file_path)
+            result["sheets"].append({
+                "sheet_name": ws.title,
+                "dataframe": df,
+                "preview_top": df.head(10),
+                "preview_bottom": df.tail(10),
+            })
 
-    else:  # CSVファイルの場合
-        df = pd.read_csv(file_path)
-        metadata["worksheet"] = None
-        metadata["merged_cells"] = []
-        metadata["hidden_rows"] = []
-        metadata["hidden_cols"] = []
-
-    return df, metadata
-
-def get_hidden_rows_columns(worksheet: Worksheet) -> Tuple[List[int], List[str]]:
-    """
-    非表示の行と列を特定
-    """
-    hidden_rows = [
-        idx for idx, dim in worksheet.row_dimensions.items()
-        if dim.hidden
-    ]
-    hidden_cols = [
-        key for key, dim in worksheet.column_dimensions.items()
-        if dim.hidden
-    ]
-    return hidden_rows, hidden_cols
+    return result

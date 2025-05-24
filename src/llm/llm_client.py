@@ -1,12 +1,9 @@
-import os
-from dotenv import load_dotenv
 import litellm
+import streamlit as st  # secrets.toml を使うために必要
 
-# 環境変数からAPIキーを取得
-load_dotenv()
-litellm.api_key = os.getenv("OPENAI_API_KEY")
+# StreamlitのsecretsからAPIキー取得
+litellm.api_key = st.secrets["OPENAI_API_KEY"]
 
-# モデル設定（ここで固定）
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_TEMPERATURE = 0.0
 DEFAULT_MAX_TOKENS = 8192

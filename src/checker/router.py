@@ -1,32 +1,34 @@
-import json
-import importlib
-from typing import List, Dict, Any
+import json, importlib
+from typing import Any
+from src.processor.context import TableContext
 
-def run_checks_from_rules(rule_file: str, df, workbook, filepath: str, level: str = "level1") -> List[Dict[str, Any]]:
-    """
-    ルールファイルを読み込み、各チェック関数を実行し、結果を返す。
-    """
-    with open(rule_file, "r", encoding="utf-8") as f:
+MODULE_MAP = {
+    "level1": "src.checker.level1_checker",
+    "level2": "src.checker.level2_checker",
+    "level3": "src.checker.level3_checker",
+}
+
+def run_checks_from_rules(
+    rule_file: str,
+    ctx: TableContext,
+    workbook: Any,
+    filepath: str,
+    level: str
+) -> list[dict[str, Any]]:
+    with open(rule_file, encoding="utf-8") as f:
         rules = json.load(f)
-
-    # level1_checks モジュールを動的に import
-    check_module = importlib.import_module(f"src.checker.{level}_checks")
-
+    mod = importlib.import_module(MODULE_MAP[level])
     results = []
     for rule in rules:
-        func_name = rule["function"]
-        func = getattr(check_module, func_name)
-
+        fn = getattr(mod, rule["function"])
         try:
-            passed, message = func(df=df, workbook=workbook, filepath=filepath)
+            passed, msg = fn(ctx, workbook, filepath)
         except Exception as e:
-            passed, message = False, f"エラー発生: {e}"
-
+            passed, msg = False, f"エラー発生: {e}"
         results.append({
             "id": rule["id"],
             "description": rule["description"],
             "result": "✓" if passed else "✗",
-            "message": message
+            "message": msg
         })
-
     return results
