@@ -34,7 +34,7 @@ pip install -r requirements.txt
 ```
 
 3. 環境変数の設定
-`.env`ファイルを作成し、以下の内容を設定：
+環境変数の設定 .streamlit/secrets.toml ファイルを作成し、以下を記述
 ```
 OPENAI_API_KEY=your_api_key_here
 ```
