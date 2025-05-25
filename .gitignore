@@ -4,6 +4,7 @@ reports/
 # 環境変数ファイル
 .env
 .streamlit/secrets.toml
+.streamlit/config.toml
 
 # Python
 __pycache__/
