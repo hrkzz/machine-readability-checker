@@ -3,15 +3,17 @@ import pandas as pd
 import json
 import re
 import textwrap
+from pathlib import Path
+import base64
+import openai
 
 from src.config import PREVIEW_ROW_COUNT
 from src.llm.llm_client import call_llm
+from src.llm.llm_client import call_llm_with_image
 from .context import TableContext
 
+
 def select_main_sheet(sheet_infos: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    複数シートの先頭をLLMに渡し、メインテーブルと判断されたシートの情報を返す。
-    """
     prompt_parts = []
     for sheet in sheet_infos:
         preview = sheet["preview_top"].fillna("").astype(str).values.tolist()
@@ -19,7 +21,7 @@ def select_main_sheet(sheet_infos: List[Dict[str, Any]]) -> Dict[str, Any]:
         prompt_parts.append(f"[{sheet['sheet_name']}]\n{text}")
 
     prompt = (
-        "以下は複数のExcelシートの先頭{PREVIEW_ROW_COUNT}行です。\n"
+        f"以下は複数のExcelシートの先頭{PREVIEW_ROW_COUNT}行です。\n"
         "業務上・分析上のメインテーブルに該当するシート名のみを、正確に1つだけ出力してください。\n\n"
         + "\n\n".join(prompt_parts)
     )
@@ -29,14 +31,10 @@ def select_main_sheet(sheet_infos: List[Dict[str, Any]]) -> Dict[str, Any]:
         if sheet["sheet_name"] in response:
             return sheet
 
-    # マッチしなければ最初のシートを返す
     return sheet_infos[0]
 
 
 def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    メインシートの先頭・末尾をLLMに渡し、構造情報（カラム行、データ行、注釈行）を取得する。
-    """
     df = sheet["dataframe"]
     total_rows = df.shape[0]
     top = sheet["preview_top"].fillna("").astype(str).values.tolist()
@@ -45,61 +43,19 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
 
     prompt = textwrap.dedent(f"""\
         以下はシート「{sheet['sheet_name']}」の先頭{PREVIEW_ROW_COUNT}行と末尾{PREVIEW_ROW_COUNT}行です。
-        このシートは以下の特徴があります：
-        - セル結合（merged cells）が含まれる可能性があります。
-        - ヘッダーが複数行（マルチインデックス）にまたがっている可能性があります。
-        - 行の一部が注釈やタイトルなど、データではないメタ情報を含むことがあります。
-        - 合計 {total_rows} 行存在します。
-
-        この表の構造を解析して、以下のJSON形式（1-indexed）で返してください：
+        表の構造を解析して、以下のJSON形式（1-indexed）で返してください：
         {{
           "column_rows": [],
           "data_start": ,
           "data_end": ,
           "annotation_rows": []
         }}
-
-        出力例：
-        json
-        {{
-          "column_rows": [3, 4],
-          "data_start": 5,
-          "data_end": 29,
-          "annotation_rows": [1, 30]
-        }}
-
-        判定ルールのヒント：
-        1. column_rows（列見出し、データの列名に相当）
-        - データを列方向に整理するための名前（例えば「品目番号」「項目名」「年月日」など）。
-        - 表タイトルや注釈（例：「項目：総合季節調整指数」など）は含めないこと。
-        - 必要に応じて、複数行にわたるマルチインデックスの可能性あり。
-        - セル結合や「単位」などが含まれることもある。
-
-        2. annotation_rows（タイトル・出典・備考などの説明行）
-        - 表の上部や下部に位置し、「表タイトル」「注記」「出典」などを含む行。
-        - 多くの列で文字列のみで構成されている。
-        - 表の構造に含めたくない場合、すべてこちらに分類する。
-
-        3. data_start / data_end（データ行の範囲）
-        - 実データが含まれており、多くのセルが数値型。
-        - column_rows の直後から始まり、連続する構造。
-
-        注意点
-        column_rows, data_start, data_end, annotation_rowsが重なることはありません。
-        この表は Wide形式（列数が非常に多い）または統計表形式である可能性があります。
-        - 列名が複数行にまたがっている場合（例：男女別×指標別）、column_rows は 2〜4 行を含むことがあります。
-        - 表タイトルや補足文（例：「第2表 就業状態別15歳以上人口」など）は annotation_rows に分類し、column_rows に含めないでください。
-        - LLMがトークン制限で一部の列しか見えない場合も、構造の一貫性から column_rows を類推して判断してください。
-
         プレビュー:
         {content}
-
-
     """)
 
     raw_response = call_llm(prompt)
 
-    # JSON部分だけ抽出（```json ... ``` 形式のガードを削除）
     match = re.search(r"{[\s\S]+}", raw_response)
     if match:
         try:
@@ -112,64 +68,89 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "sheet_name": sheet["sheet_name"],
         "dataframe": df,
-        "structure_response": parsed  # ← JSONそのものを格納
+        "structure_response": parsed
     }
 
 
+def analyze_table_structure_by_image(sheet: Dict[str, Any], image_path: Path) -> Dict[str, Any]:
+    prompt = """
+これは政府統計のExcel表の画像です。以下の構造をJSON形式（1-indexed）で返してください：
+
+{
+  "column_rows": [],
+  "data_start": ,
+  "data_end": ,
+  "annotation_rows": []
+}
+"""
+    response = call_llm_with_image(prompt, image_path)
+
+    match = re.search(r"{[\s\S]+}", response)
+    if match:
+        parsed = json.loads(match.group())
+    else:
+        raise ValueError("画像構造解析レスポンスからJSONを抽出できませんでした")
+
+    return {
+        "sheet_name": sheet["sheet_name"],
+        "dataframe": sheet["dataframe"],
+        "structure_response": parsed
+    }
+
+def parse_sheet_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return analyze_table_structure(sheet)
+    except Exception as e:
+        print(f"⚠️ テキストベース解析に失敗: {e}")
+        if "image_path" not in sheet:
+            raise ValueError("画像パスが指定されていないため、画像ベース構造解析に切り替えできません")
+        image_path = Path(sheet["image_path"])
+        return analyze_table_structure_by_image(sheet, image_path)
+
+
 def extract_structured_table(info: Dict[str, Any]) -> TableContext:
-    """
-    LLMのJSON応答をパースし、TableContextを構築して返す。
-    マルチ行ヘッダーも pandas.MultiIndex で扱う。
-    """
     raw_resp = info["structure_response"]
 
-    # raw_resp が dict か str かで処理を分岐
     if isinstance(raw_resp, dict):
         parsed = raw_resp
     else:
-        # ```json {...} ``` 形式が含まれる場合は中身を抽出
-        m = re.search(r"```json\s*(\{.*?\})\s*```", raw_resp, re.DOTALL)
+        m = re.search(r"json\s*(\{.*?\})\s*", raw_resp, re.DOTALL)
         js = m.group(1) if m else raw_resp.strip()
         try:
             parsed = json.loads(js)
         except json.JSONDecodeError as e:
-            print("=== JSONパース失敗 ===")
-            print(raw_resp)
             raise ValueError(f"構造出力のパースに失敗しました: {e}")
 
-    # インデックス（0-based）に調整
-    column_rows = [i - 1 for i in parsed["column_rows"]]
-    data_start   = parsed["data_start"] - 1
-    data_end     = parsed["data_end"]   - 1
-    annotations  = [i - 1 for i in parsed.get("annotation_rows", [])]
+    def to_int_list(values):
+        return [int(v) for v in values if isinstance(v, (int, str)) and str(v).strip().isdigit()]
+    
+    column_rows = [i - 1 for i in to_int_list(parsed.get("column_rows", []))]
+    data_start  = int(parsed["data_start"]) - 1
+    data_end    = int(parsed["data_end"]) - 1
+    annotations = [i - 1 for i in to_int_list(parsed.get("annotation_rows", []))]
 
     df = info["dataframe"]
 
-    # 上部注釈（ヘッダー行より上）
     upper = df.iloc[:min(column_rows)].copy()
-    # 下部注釈（データ行の下）
     lower = df.iloc[data_end + 1:].copy()
 
-    # カラム行の抽出
     col_df = df.iloc[column_rows].fillna("").astype(str)
     if len(column_rows) > 1:
-        arrays = col_df.values
         arrays_fixed = []
-        for level in arrays:
-            fixed_level = []
+        for level in col_df.values:
+            fixed = []
             last_val = ""
             for val in level:
                 if val == "":
                     val = last_val or "(空白)"
                 else:
                     last_val = val
-                fixed_level.append(val)
-            arrays_fixed.append(fixed_level)
+                fixed.append(val)
+            arrays_fixed.append(fixed)
         cols = pd.MultiIndex.from_arrays(arrays_fixed)
     else:
         cols = col_df.iloc[0].tolist()
 
-    # 実データ部分を切り出し
     data = df.iloc[data_start : data_end + 1].copy()
     data.columns = cols
     data.reset_index(drop=True, inplace=True)

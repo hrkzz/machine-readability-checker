@@ -4,7 +4,6 @@ reports/
 # 環境変数ファイル
 .env
 .streamlit/secrets.toml
-.streamlit/config.toml
 
 # Python
 __pycache__/
@@ -23,3 +22,4 @@ ENV/
 
 # その他
 .DS_Store 
+.TAG
