@@ -35,7 +35,7 @@ if os.path.exists(css_path):
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 st.title("機械可読性チェックツール")
-st.markdown("CSV / Excel ファイルをアップロードして、レベル1〜3の自動チェックを実行できます。")
+#st.markdown("CSV / Excel ファイルをアップロードして、レベル1〜3の自動チェックを実行できます。")
 
 uploaded_file = st.file_uploader("CSV または Excel ファイルをアップロード", type=["csv", "xlsx"])
 
@@ -47,7 +47,7 @@ if uploaded_file is not None:
         tmp_file.write(uploaded_file.getbuffer())
         st.session_state["uploaded_path"] = tmp_file.name
 
-    st.info(f"ファイル「{uploaded_file.name}」がアップロードされました。下のボタンを押して構造解析を開始してください。")
+    st.info(f"{uploaded_file.name}がアップロードされました。下のボタンを押して構造解析を開始してください。")
 
 # 構造解析の実行ボタン
 if uploaded_file is not None and "structure_done" not in st.session_state:
@@ -96,13 +96,13 @@ if ctx is not None and "check_done" not in st.session_state:
     if st.button("チェックを実行"):
         with st.spinner("チェック中..."):
             results = []
-            progress = st.progress(0, text="LEVEL1 チェック開始...")
+            progress = st.progress(0, text="LEVEL1 チェック中...")
 
             levels = ["level1", "level2", "level3"]
             progress_percentages = [0.0, 0.3, 0.6]
 
             for i, level in enumerate(levels):
-                progress.progress(progress_percentages[i], text=f"{level.upper()} チェック開始...")
+                progress.progress(progress_percentages[i], text=f"{level.upper()} チェック中...")
 
                 rule_file = f"rules/{level}.json"
                 level_results = run_checks_from_rules(
@@ -114,7 +114,7 @@ if ctx is not None and "check_done" not in st.session_state:
                 )
                 results.append((level, level_results))
 
-            progress.progress(0.9, text="チェック結果の整理と要約生成中...")
+            progress.progress(0.9, text="チェック結果の整理と要約生成...")
 
             summary, summary_md, llm_comment = summarize_results(results)
 
