@@ -4,18 +4,21 @@ Excel/CSVファイルの機械可読性を診断するためのWebアプリケ�
 
 ## 機能
 
-- Excel/CSVファイルのアップロードと診断
-- 診断結果の詳細表示
-- レポートの生成と保存
+- Excel/CSVファイルのアップロード
+- テーブルデータの構造解析
+- 機械可読性診断
+- レポートの生成
 
 ### 診断項目
-[官民におけるデータの利活用について（内閣官房）](https://www.cas.go.jp/jp/seisaku/digital_gyozaikaikaku/data8/data8_siryou1.pdf)の7ページにあるデータの機械可読性を高めるための新しいルールのイメージ
+以下の2つのルールの順守度合いを診断
+- [統計表における機械判読可能なデータの表記方法の統一ルール](https://www.soumu.go.jp/menu_news/s-news/01toukatsu01_02000186.html)
+- [官民におけるデータの利活用について（内閣官房）](https://www.cas.go.jp/jp/seisaku/digital_gyozaikaikaku/data8/data8_siryou1.pdf)の7ページにあるデータの機械可読性を高めるための新しいルールのイメージ
 
 ## 必要条件
 
 - Python 3.8以上
 - 必要なパッケージ（requirements.txtに記載）
-- OpenAI APIキー（.envファイルで設定）
+- OpenAI APIキー（.streamlit/secrets.tomlファイルで設定）
 
 ## インストール方法
 
@@ -44,35 +47,40 @@ make run
 ```
 
 2. 診断したいExcel/CSVファイルをアップロード
+　※xlsxとcsvのみアップロード可能
 
 3. 診断結果の確認
-   - サマリー表示
-   - 詳細な診断結果
-   - レポートのダウンロード
 
 ## プロジェクト構造
 
 ```
 machine_readability_checker/
-├── src/
-│   ├── app.py              # Streamlitアプリケーション
-│   ├── config.py           # 設定ファイル
-│   ├── checker/            # チェック機能
-│   │   ├── level1_checks.py
-│   │   ├── level2_checks.py
-│   │ 　├── level3_checks.py
-│   │   └──  utils.py
-│   ├── processor/          # データ処理
-│   │   └── loader.py
-│   └── llm/               # LLM関連
-│       └── column_meaning.py
-├── rules/                 # ルール定義
+├── Makefile                   
+├── requirements.txt           
+├── README.md                  
+├── data/                      # アップロードデータや一時ファイル保存先
+├── reports/                   # レポート出力ディレクトリ
+├── rules/                     # 各チェックレベルのルール定義
 │   ├── level1.json
 │   ├── level2.json
 │   └── level3.json
-├── data/                  # 一時ファイル保存
-├── reports/              # レポート出力
-├── requirements.txt      # 依存パッケージ
-└── README.md            # 本ファイル
+├── src/
+│   ├── app/
+│   │   ├── styles/            # スタイル（CSS等）を格納
+│   │   └── app.py             # Streamlit アプリケーションUI
+│   ├── checker/               # 機械可読性チェック機能のロジック群
+│   │   ├── level1_checker.py  # レベル1チェックの実装
+│   │   ├── level2_checker.py  # レベル2チェックの実装
+│   │   ├── level3_checker.py  # レベル3チェックの実装
+│   │   ├── router.py          # チェック処理のルーティング管理
+│   │   └── utils.py           # 共通ユーティリティ関数
+│   ├── llm/                   # LLM（大規模言語モデル）関連
+│   │   └── llm_client.py      # LLMへのクライアントアクセスや処理
+│   ├── processor/             # データ処理・パース用モジュール
+│   │   ├── context.py         # 文脈情報の処理
+│   │   ├── loader.py          # データ読み込み処理
+│   │   └── table_parser.py    # テーブル構造の解析処理
+│   ├── config.py              # アプリケーション設定
+│   └── summary.py             # チェック結果の要約処理
 ```
 
