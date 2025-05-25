@@ -10,6 +10,7 @@ reports/
 __pycache__/
 *.py[cod]
 *$py.class
+test.py
 
 # 仮想環境
 venv/
