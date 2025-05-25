@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, cast
 import pandas as pd
 import json
 import re
@@ -51,10 +51,10 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
         "出力例：\n"
         "```json\n"
         "{\n"
-        '  "column_rows": [3, 4],\n'
-        '  "data_start": 5,\n'
-        '  "data_end": 29,\n'
-        '  "annotation_rows": [1, 30]\n'
+        "  \"column_rows\": [3, 4],\n"
+        "  \"data_start\": 5,\n"
+        "  \"data_end\": 29,\n"
+        "  \"annotation_rows\": [1, 30]\n"
         "}\n"
         "```\n\n"
         f"プレビュー:\n{content}"
@@ -74,7 +74,7 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
     マルチ行ヘッダーも pandas.MultiIndex で扱う。
     """
     raw = info["structure_response"]
-    df  = info["dataframe"]
+    df = info["dataframe"]
 
     # ```json ... ``` で返ってきた場合は中身だけを取り出し
     m = re.search(r"```json\s*(\{.*?\})\s*```", raw, re.DOTALL)
@@ -83,8 +83,8 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
     try:
         parsed = json.loads(js)
         column_rows = [i - 1 for i in parsed["column_rows"]]
-        data_start  = parsed["data_start"] - 1
-        data_end    = parsed["data_end"]   - 1
+        data_start = parsed["data_start"] - 1
+        data_end = parsed["data_end"] - 1
         annotations = [i - 1 for i in parsed.get("annotation_rows", [])]
     except Exception:
         print("=== JSONパース失敗 ===")
@@ -108,16 +108,19 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
     data.columns = cols
     data.reset_index(drop=True, inplace=True)
 
+    # row_indices の型を強制キャストして pyright エラーを抑制
+    row_indices: Dict[str, int] = cast(Dict[str, int], {
+        "column_rows": column_rows,
+        "data_start": data_start,
+        "data_end": data_end,
+        "annotations": annotations
+    })
+
     return TableContext(
-        sheet_name        = info["sheet_name"],
-        data              = data,
-        columns           = cols,
-        upper_annotations = upper,
-        lower_annotations = lower,
-        row_indices       = {
-            "column_rows": column_rows,
-            "data_start":  data_start,
-            "data_end":    data_end,
-            "annotations": annotations
-        }
+        sheet_name=info["sheet_name"],
+        data=data,
+        columns=cols,
+        upper_annotations=upper,
+        lower_annotations=lower,
+        row_indices=row_indices
     )

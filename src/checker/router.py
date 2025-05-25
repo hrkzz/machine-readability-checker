@@ -1,4 +1,5 @@
-import json, importlib
+import json
+import importlib
 from typing import Any
 from src.processor.context import TableContext
 

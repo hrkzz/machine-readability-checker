@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 from openpyxl import load_workbook
 import tempfile
 import os
@@ -15,7 +14,7 @@ from src.processor.table_parser import (
 from src.checker.router import run_checks_from_rules
 from src.summary import summarize_results
 
-# レポートディレクトリの初期化（アプリ起動時に中身を空にする）
+# レポートディレクトリの初期化
 REPORT_DIR = Path("reports")
 if REPORT_DIR.exists():
     for f in REPORT_DIR.iterdir():
@@ -50,7 +49,7 @@ if uploaded_file is not None:
 
     st.info(f"ファイル「{uploaded_file.name}」がアップロードされました。下のボタンを押して構造解析を開始してください。")
 
-# 構造解析の実行ボタン（未完了時のみ表示）
+# 構造解析の実行ボタン
 if uploaded_file is not None and "structure_done" not in st.session_state:
     if st.button("構造解析を実行"):
         with st.spinner("構造解析中..."):
@@ -62,15 +61,19 @@ if uploaded_file is not None and "structure_done" not in st.session_state:
 
             st.session_state["ctx"] = ctx
             st.session_state["workbook"] = wb
-            st.session_state["structure_done"] = True  # 完了フラグ
+            st.session_state["structure_done"] = True
 
         st.success(f"メインシート「{ctx.sheet_name}」を選択し、構造を解析しました。")
 
-# テーブル構造の表示
+# ctx / wb の初期化と安全な取得
+ctx = None
+wb = None
 if "ctx" in st.session_state:
     ctx = st.session_state["ctx"]
     wb = st.session_state["workbook"]
 
+# テーブル構造の表示
+if ctx is not None:
     with st.expander("テーブル構造解析結果"):
         st.markdown("カラム構造")
         st.write(ctx.columns)
@@ -88,8 +91,8 @@ if "ctx" in st.session_state:
 
     st.info("下のボタンを押して機械可読性のチェックを開始してください。")
 
-# チェック実行ボタン（未完了時のみ）
-if "ctx" in st.session_state and "check_done" not in st.session_state:
+# チェック実行ボタン
+if ctx is not None and "check_done" not in st.session_state:
     if st.button("チェックを実行"):
         with st.spinner("チェック中..."):
             results = []
@@ -111,28 +114,26 @@ if "ctx" in st.session_state and "check_done" not in st.session_state:
                 )
                 results.append((level, level_results))
 
-            # 要約フェーズ（90%）
             progress.progress(0.9, text="チェック結果の整理と要約生成中...")
 
             summary, summary_md, llm_comment = summarize_results(results)
 
-            # 最終完了（100%）
             progress.progress(1.0, text="全てのチェックが完了しました")
 
-            # セッションに保存
             st.session_state["results"] = results
             st.session_state["summary"] = summary
             st.session_state["summary_md"] = summary_md
             st.session_state["llm_comment"] = llm_comment
             st.session_state["check_done"] = True
 
-# チェック結果の表示
+# チェック結果の表示とレポート生成
 if "results" in st.session_state and "summary" in st.session_state:
     results = st.session_state["results"]
     summary = st.session_state["summary"]
     summary_md = st.session_state.get("summary_md", "")
     llm_comment = st.session_state["llm_comment"]
     uploaded_file = st.session_state.get("uploaded_file", None)
+    file_name = uploaded_file.name if uploaded_file is not None else "不明"
 
     st.markdown(summary_md)
     st.markdown("### 結果概要")
@@ -146,10 +147,9 @@ if "results" in st.session_state and "summary" in st.session_state:
                 st.markdown(f"- 詳細: {item['message']}")
                 st.markdown("---")
 
-    # レポート生成
     report_lines = [
         "# 機械可読性チェックレポート（レベル1〜3）",
-        f"ファイル名: {uploaded_file.name if uploaded_file else '不明'}",
+        f"ファイル名: {file_name}",
         "",
         "## 総評",
         llm_comment,
@@ -168,7 +168,6 @@ if "results" in st.session_state and "summary" in st.session_state:
 
     report_str = "\n".join(report_lines)
 
-    # ダウンロードボタン
     st.download_button(
         label="レポートをダウンロード",
         data=report_str,
@@ -176,8 +175,7 @@ if "results" in st.session_state and "summary" in st.session_state:
         mime="text/markdown"
     )
 
-    # ファイル保存（ただし通知なし）
-    report_filename = f"{Path(uploaded_file.name).stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+    report_filename = f"{Path(file_name).stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
     report_path = REPORT_DIR / report_filename
     try:
         with open(report_path, "w", encoding="utf-8") as f:

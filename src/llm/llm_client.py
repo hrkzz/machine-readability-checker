@@ -1,5 +1,6 @@
 import litellm
 import streamlit as st  # secrets.toml を使うために必要
+from typing import Any
 
 # StreamlitのsecretsからAPIキー取得
 litellm.api_key = st.secrets["OPENAI_API_KEY"]
@@ -14,7 +15,8 @@ def call_llm(prompt: str) -> str:
     モデル設定はこのモジュール内で管理する。
     """
     try:
-        response = litellm.completion(
+        # CustomStreamWrapper の型を明示的に Any にして、インデックスアクセスを許可
+        response: Any = litellm.completion(
             model=DEFAULT_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=DEFAULT_TEMPERATURE,

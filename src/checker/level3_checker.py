@@ -1,13 +1,12 @@
-from typing import Tuple
+from typing import Tuple, Optional
 import pandas as pd
 from openpyxl.workbook.workbook import Workbook
 
 from src.processor.context import TableContext
 from src.checker.utils import is_sheet_likely, is_likely_long_format
 
-
 def check_code_format_for_choices(
-    ctx: TableContext, workbook: Workbook = None, filepath: str = None
+    ctx: TableContext, workbook: Optional[Workbook] = None, filepath: Optional[str] = None
 ) -> Tuple[bool, str]:
     df = ctx.data
     candidate_cols = []
@@ -29,10 +28,12 @@ def check_code_format_for_choices(
         return False, f"コード表記ではない可能性のある列: {candidate_cols}"
     return True, "選択肢はコード表記されています"
 
-
 def check_codebook_exists(
-    ctx: TableContext, workbook: Workbook, filepath: str
+    ctx: TableContext, workbook: Optional[Workbook], filepath: Optional[str]
 ) -> Tuple[bool, str]:
+    if workbook is None:
+        return False, "Workbook が None です"
+
     for sheet in workbook.worksheets:
         if sheet.title == ctx.sheet_name:
             continue
@@ -40,10 +41,12 @@ def check_codebook_exists(
             return True, f"コード表とみられるシート: {sheet.title}"
     return False, "コード表が見つかりません"
 
-
 def check_question_master_exists(
-    ctx: TableContext, workbook: Workbook, filepath: str
+    ctx: TableContext, workbook: Optional[Workbook], filepath: Optional[str]
 ) -> Tuple[bool, str]:
+    if workbook is None:
+        return False, "Workbook が None です"
+
     for sheet in workbook.worksheets:
         if sheet.title == ctx.sheet_name:
             continue
@@ -51,10 +54,12 @@ def check_question_master_exists(
             return True, f"設問マスターとみられるシート: {sheet.title}"
     return False, "設問マスター（変数定義表）が見つかりません"
 
-
 def check_metadata_presence(
-    ctx: TableContext, workbook: Workbook, filepath: str
+    ctx: TableContext, workbook: Optional[Workbook], filepath: Optional[str]
 ) -> Tuple[bool, str]:
+    if workbook is None:
+        return False, "Workbook が None です"
+
     for sheet in workbook.worksheets:
         if sheet.title == ctx.sheet_name:
             continue
@@ -62,9 +67,8 @@ def check_metadata_presence(
             return True, f"メタ情報とみられるシート: {sheet.title}"
     return False, "調査概要やメタデータが確認できません"
 
-
 def check_long_format_if_many_columns(
-    ctx: TableContext, workbook: Workbook = None, filepath: str = None
+    ctx: TableContext, workbook: Optional[Workbook] = None, filepath: Optional[str] = None
 ) -> Tuple[bool, str]:
     if is_likely_long_format(ctx.data):
         return True, "縦型（long format）とみなされます"
