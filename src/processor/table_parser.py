@@ -4,12 +4,13 @@ import json
 import re
 import textwrap
 
+from src.config import PREVIEW_ROW_COUNT
 from src.llm.llm_client import call_llm
 from .context import TableContext
 
 def select_main_sheet(sheet_infos: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    複数シートの先頭25行をLLMに渡し、メインテーブルと判断されたシートの情報を返す。
+    複数シートの先頭をLLMに渡し、メインテーブルと判断されたシートの情報を返す。
     """
     prompt_parts = []
     for sheet in sheet_infos:
@@ -18,7 +19,7 @@ def select_main_sheet(sheet_infos: List[Dict[str, Any]]) -> Dict[str, Any]:
         prompt_parts.append(f"[{sheet['sheet_name']}]\n{text}")
 
     prompt = (
-        "以下は複数のExcelシートの先頭25行です。\n"
+        "以下は複数のExcelシートの先頭{PREVIEW_ROW_COUNT}行です。\n"
         "業務上・分析上のメインテーブルに該当するシート名のみを、正確に1つだけ出力してください。\n\n"
         + "\n\n".join(prompt_parts)
     )
@@ -34,7 +35,7 @@ def select_main_sheet(sheet_infos: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
     """
-    メインシートの先頭・末尾25行をLLMに渡し、構造情報（カラム行、データ行、注釈行）を取得する。
+    メインシートの先頭・末尾をLLMに渡し、構造情報（カラム行、データ行、注釈行）を取得する。
     """
     df = sheet["dataframe"]
     total_rows = df.shape[0]
@@ -43,7 +44,7 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
     content = "\n".join(",".join(row) for row in (top + [["..."]] + bot))
 
     prompt = textwrap.dedent(f"""\
-        以下はシート「{sheet['sheet_name']}」の先頭25行と末尾25行です。
+        以下はシート「{sheet['sheet_name']}」の先頭{PREVIEW_ROW_COUNT}行と末尾{PREVIEW_ROW_COUNT}行です。
         このシートは以下の特徴があります：
         - セル結合（merged cells）が含まれる可能性があります。
         - ヘッダーが複数行（マルチインデックス）にまたがっている可能性があります。

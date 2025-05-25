@@ -14,9 +14,9 @@ from src.processor.table_parser import (
     analyze_table_structure,
     extract_structured_table,
 )
-
+from src.processor.summary import summarize_results
 from src.checker.router import run_checks_from_rules
-from src.summary import summarize_results
+
 
 # レポートディレクトリの初期化
 REPORT_DIR = Path("reports")

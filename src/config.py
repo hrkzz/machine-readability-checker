@@ -11,3 +11,6 @@ RULES_DIR = BASE_DIR / "rules"
 # ディレクトリが存在しない場合は作成
 for directory in [DATA_DIR, REPORTS_DIR, RULES_DIR]:
     directory.mkdir(exist_ok=True)
+
+# プレビュー行数（上部・下部）
+PREVIEW_ROW_COUNT = 25

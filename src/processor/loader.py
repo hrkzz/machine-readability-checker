@@ -1,19 +1,23 @@
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, cast
 import pandas as pd
 import openpyxl
+from src.config import PREVIEW_ROW_COUNT
 
 # 対応可能な拡張子（旧形式 .xls は除外）
 ALLOWED_EXTENSIONS = {".xlsx", ".csv"}
 
 def drop_empty_rows(df: pd.DataFrame) -> pd.DataFrame:
-    return df[
-        ~df.apply(lambda row: row.astype(str).str.strip().replace("nan", "").eq("").all(), axis=1)
-    ].reset_index(drop=True)
+    def is_empty_row(row: pd.Series) -> bool:
+        return all(str(cell).strip() == "" or str(cell).lower() == "nan" for cell in row)
+
+    mask = df.apply(is_empty_row, axis=1)
+    result = df[~mask].reset_index(drop=True)
+    return cast(pd.DataFrame, result)
 
 def load_file(file_path: Path) -> Dict[str, Any]:
     """
-    ファイルを読み込み、各シートのデータ（先頭・末尾25行）を返す。
+    ファイルを読み込み、各シートのデータ（先頭・末尾{PREVIEW_ROW_COUNT}行）を返す。
     loader はあくまで「生のテーブル情報」を提供し、オブジェクト検出などは
     checker 側のユーティリティに委ねます。
     """
@@ -34,8 +38,8 @@ def load_file(file_path: Path) -> Dict[str, Any]:
         result["sheets"].append({
             "sheet_name": "CSV",
             "dataframe": df,
-            "preview_top": df.head(25),
-            "preview_bottom": df.tail(25),
+            "preview_top": df.head(PREVIEW_ROW_COUNT),
+            "preview_bottom": df.tail(PREVIEW_ROW_COUNT),
         })
     else:
         # .xlsx
