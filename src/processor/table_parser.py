@@ -9,7 +9,7 @@ from .context import TableContext
 
 def select_main_sheet(sheet_infos: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    複数シートの先頭10行をLLMに渡し、メインテーブルと判断されたシートの情報を返す。
+    複数シートの先頭25行をLLMに渡し、メインテーブルと判断されたシートの情報を返す。
     """
     prompt_parts = []
     for sheet in sheet_infos:
@@ -18,7 +18,7 @@ def select_main_sheet(sheet_infos: List[Dict[str, Any]]) -> Dict[str, Any]:
         prompt_parts.append(f"[{sheet['sheet_name']}]\n{text}")
 
     prompt = (
-        "以下は複数のExcelシートの先頭10行です。\n"
+        "以下は複数のExcelシートの先頭25行です。\n"
         "業務上・分析上のメインテーブルに該当するシート名のみを、正確に1つだけ出力してください。\n\n"
         + "\n\n".join(prompt_parts)
     )
@@ -34,7 +34,7 @@ def select_main_sheet(sheet_infos: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
     """
-    メインシートの先頭・末尾10行をLLMに渡し、構造情報（カラム行、データ行、注釈行）を取得する。
+    メインシートの先頭・末尾25行をLLMに渡し、構造情報（カラム行、データ行、注釈行）を取得する。
     """
     df = sheet["dataframe"]
     total_rows = df.shape[0]
@@ -43,7 +43,7 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
     content = "\n".join(",".join(row) for row in (top + [["..."]] + bot))
 
     prompt = textwrap.dedent(f"""\
-        以下はシート「{sheet['sheet_name']}」の先頭10行と末尾10行です。
+        以下はシート「{sheet['sheet_name']}」の先頭25行と末尾25行です。
         このシートは以下の特徴があります：
         - セル結合（merged cells）が含まれる可能性があります。
         - ヘッダーが複数行（マルチインデックス）にまたがっている可能性があります。
@@ -70,7 +70,7 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
         判定ルールのヒント：
         1. column_rows（列見出し、データの列名に相当）
         - データを列方向に整理するための名前（例えば「品目番号」「項目名」「年月日」など）。
-        - **表タイトルや注釈（例：「項目：総合季節調整指数」など）は含めないこと。**
+        - 表タイトルや注釈（例：「項目：総合季節調整指数」など）は含めないこと。
         - 必要に応じて、複数行にわたるマルチインデックスの可能性あり。
         - セル結合や「単位」などが含まれることもある。
 
@@ -83,8 +83,16 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
         - 実データが含まれており、多くのセルが数値型。
         - column_rows の直後から始まり、連続する構造。
 
+        注意点
+        column_rows, data_start, data_end, annotation_rowsが重なることはありません。
+        この表は Wide形式（列数が非常に多い）または統計表形式である可能性があります。
+        - 列名が複数行にまたがっている場合（例：男女別×指標別）、column_rows は 2〜4 行を含むことがあります。
+        - 表タイトルや補足文（例：「第2表 就業状態別15歳以上人口」など）は annotation_rows に分類し、column_rows に含めないでください。
+        - LLMがトークン制限で一部の列しか見えない場合も、構造の一貫性から column_rows を類推して判断してください。
+
         プレビュー:
         {content}
+
 
     """)
 

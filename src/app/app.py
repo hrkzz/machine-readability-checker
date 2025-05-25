@@ -14,6 +14,7 @@ from src.processor.table_parser import (
     analyze_table_structure,
     extract_structured_table,
 )
+
 from src.checker.router import run_checks_from_rules
 from src.summary import summarize_results
 
@@ -82,7 +83,11 @@ if ctx is not None:
         st.write(ctx.columns)
 
         st.markdown("データ（先頭5行）")
-        st.dataframe(ctx.data.head())
+        try:
+            st.dataframe(ctx.data.head())
+        except Exception:
+            st.warning("⚠️ 表示中にエラーが発生したため、テキスト表示に切り替えます。")
+            st.code(ctx.data.head().to_string(), language="text")
 
         if not ctx.upper_annotations.empty:
             st.markdown("上部注釈")
