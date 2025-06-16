@@ -47,7 +47,7 @@ make run
 ```
 
 2. 診断したいExcel/CSVファイルをアップロード
-　※xlsxとcsvのみアップロード可能
+　※xlsx、xls、csvファイルに対応
 
 3. 診断結果の確認
 

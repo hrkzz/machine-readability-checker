@@ -17,25 +17,35 @@ def check_valid_file_format(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
     ext = Path(filepath).suffix.lower()
-    if ext not in {".csv", ".xlsx"}:
+    if ext not in {".csv", ".xlsx", ".xls"}:
         return False, f"サポート外のファイル形式です: {ext}"
-    return True, "ファイル形式はCSVまたはExcelです"
+    return True, "ファイル形式はCSV、Excel（.xlsx）、または旧Excel（.xls）です"
 
 
 def check_no_images_or_objects(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
     path = Path(filepath)
-    if path.suffix.lower() != ".xlsx":
+    ext = path.suffix.lower()
+    if ext == ".csv":
         return True, "csvファイルのためオブジェクトチェック不要"
-    if has_any_drawing_xlsx(path):
-        return False, "図形・テキストボックスが検出されました"
-    return True, "図形・テキストボックスは見つかりませんでした"
+    elif ext == ".xls":
+        return True, "xlsファイルは図形・オブジェクトチェック対象外"
+    elif ext == ".xlsx":
+        if has_any_drawing_xlsx(path):
+            return False, "図形・テキストボックスが検出されました"
+        return True, "図形・テキストボックスは見つかりませんでした"
+    else:
+        return True, "サポート外形式のためオブジェクトチェック不要"
 
 
 def check_one_table_per_sheet(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
+    # .xlsファイルの場合はワークブックがNoneになるため、スキップ
+    if workbook is None:
+        return True, "xlsファイルのため複数テーブルチェックをスキップ"
+    
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
     data_end = ctx.row_indices.get("data_end")
@@ -68,6 +78,10 @@ def check_one_table_per_sheet(
 def check_no_hidden_rows_or_columns(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
+    # .xlsファイルの場合はワークブックがNoneになるため、スキップ
+    if workbook is None:
+        return True, "xlsファイルのため非表示行・列チェックをスキップ"
+    
     ws = workbook[ctx.sheet_name]
     hidden_rows = [d.index for d in ws.row_dimensions.values() if d.hidden]
     hidden_cols = [d.index for d in ws.column_dimensions.values() if d.hidden]
@@ -98,6 +112,10 @@ def check_no_notes_outside_table(
 def check_no_merged_cells(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
+    # .xlsファイルの場合はワークブックがNoneになるため、スキップ
+    if workbook is None:
+        return True, "xlsファイルのため結合セルチェックをスキップ"
+    
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
     data_end = ctx.row_indices.get("data_end")
@@ -122,6 +140,10 @@ def check_no_merged_cells(
 def check_no_format_based_semantics(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
+    # .xlsファイルの場合はワークブックがNoneになるため、スキップ
+    if workbook is None:
+        return True, "xlsファイルのため書式チェックをスキップ"
+    
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
     data_end = ctx.row_indices.get("data_end")
@@ -168,6 +190,41 @@ def check_no_format_based_semantics(
 def check_no_whitespace_formatting(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
+    # .xlsファイルの場合はワークブックがNoneになるため、DataFrameベースでチェック
+    if workbook is None:
+        # DataFrameを使用した簡易版の空白チェック
+        sample_cells = []
+        for row_idx, row in ctx.data.iterrows():
+            for col_idx, val in enumerate(row):
+                if isinstance(val, str) and "　" in val:
+                    col_letter = get_excel_column_letter(col_idx + 1)
+                    cell_ref = f"{col_letter}{row_idx + 1}"
+                    sample_cells.append(f"{cell_ref}: '{val.strip()}'")
+                    if len(sample_cells) >= 10:
+                        break
+            if len(sample_cells) >= 10:
+                break
+
+        if not sample_cells:
+            return True, "体裁調整目的の空白は見つかりませんでした"
+
+        prompt = f"""
+            以下はExcelのセル値の一部です。これらの中に、見た目を整える目的（位置揃え・スペース調整など）で
+            **空白（特に全角スペース）が使われているものがあるか**を判定してください。
+
+            データ:
+            {chr(10).join(sample_cells)}
+
+            判断結果を次のいずれか一語で返してください：
+            - 調整目的あり
+            - 調整目的なし
+        """
+
+        result = call_llm(prompt)
+        if "調整目的あり" in result:
+            return False, f"体裁調整目的の空白が含まれている可能性があります（例: {sample_cells[:MAX_EXAMPLES]}）"
+        return True, "体裁調整目的の空白は見つかりませんでした"
+    
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
     data_end = ctx.row_indices.get("data_end")
@@ -239,6 +296,20 @@ def check_single_data_per_cell(
 def check_no_platform_dependent_characters(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
+    # .xlsファイルの場合はワークブックがNoneになるため、DataFrameベースでチェック
+    if workbook is None:
+        # DataFrameを使用した簡易版の機種依存文字チェック
+        issues = []
+        for row_idx, row in ctx.data.iterrows():
+            for col_idx, val in enumerate(row):
+                if isinstance(val, str) and detect_platform_characters(val):
+                    coord = f"{get_excel_column_letter(col_idx + 1)}{row_idx + 1}"
+                    issues.append(f"{coord}: '{val}'")
+
+        if issues:
+            return False, f"機種依存文字が含まれています（例: {issues[:MAX_EXAMPLES]}）"
+        return True, "機種依存文字は含まれていません"
+    
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
     data_end = ctx.row_indices.get("data_end")

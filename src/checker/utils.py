@@ -15,9 +15,19 @@ def get_excel_column_letter(n: int) -> str:
         result = chr(65 + r) + result
     return result
 
-def has_any_drawing_xlsx(path: Path) -> bool:
-    if path.suffix.lower() != ".xlsx":
+def has_any_drawing(path: Path) -> bool:
+    """
+    Excel ファイルに図形やオブジェクトが含まれているかをチェック
+    .xls ファイルは構造上チェックが困難なため常に False を返す
+    """
+    ext = path.suffix.lower()
+    if ext == ".xls":
+        # .xls ファイルは構造上図形チェックが困難なため、
+        # 図形がないものとして扱う（必要に応じて後で対応）
         return False
+    elif ext != ".xlsx":
+        return False
+    
     try:
         with zipfile.ZipFile(path, 'r') as z:
             for name in z.namelist():
@@ -111,3 +121,8 @@ def is_likely_long_format(df: pd.DataFrame) -> bool:
     if len(df.columns) < 10:
         return False
     return {"ID", "変数名", "値"}.issubset(set(df.columns))
+
+# 後方互換性のために元の関数名も維持
+def has_any_drawing_xlsx(path: Path) -> bool:
+    """後方互換性のための関数（has_any_drawingを使用することを推奨）"""
+    return has_any_drawing(path)

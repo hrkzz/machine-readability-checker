@@ -32,7 +32,7 @@ def check_codebook_exists(
     ctx: TableContext, workbook: Optional[Workbook], filepath: Optional[str]
 ) -> Tuple[bool, str]:
     if workbook is None:
-        return False, "Workbook が None です"
+        return False, ".xlsファイルまたはCSVファイルのためコード表チェックをスキップ"
 
     for sheet in workbook.worksheets:
         if sheet.title == ctx.sheet_name:
@@ -45,7 +45,7 @@ def check_question_master_exists(
     ctx: TableContext, workbook: Optional[Workbook], filepath: Optional[str]
 ) -> Tuple[bool, str]:
     if workbook is None:
-        return False, "Workbook が None です"
+        return False, ".xlsファイルまたはCSVファイルのため設問マスターチェックをスキップ"
 
     for sheet in workbook.worksheets:
         if sheet.title == ctx.sheet_name:
@@ -58,7 +58,7 @@ def check_metadata_presence(
     ctx: TableContext, workbook: Optional[Workbook], filepath: Optional[str]
 ) -> Tuple[bool, str]:
     if workbook is None:
-        return False, "Workbook が None です"
+        return False, ".xlsファイルまたはCSVファイルのためメタデータチェックをスキップ"
 
     for sheet in workbook.worksheets:
         if sheet.title == ctx.sheet_name:

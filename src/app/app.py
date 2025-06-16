@@ -41,7 +41,7 @@ if os.path.exists(css_path):
 st.title("機械可読性チェックツール")
 #st.markdown("CSV / Excel ファイルをアップロードして、レベル1〜3の自動チェックを実行できます。")
 
-uploaded_file = st.file_uploader("CSV または Excel ファイルをアップロード", type=["csv", "xlsx"])
+uploaded_file = st.file_uploader("CSV または Excel ファイルをアップロード", type=["csv", "xlsx", "xls"])
 
 if uploaded_file is not None:
     st.session_state["uploaded_file"] = uploaded_file
@@ -61,7 +61,15 @@ if uploaded_file is not None and "structure_done" not in st.session_state:
             main_sheet = select_main_sheet(file_result["sheets"])
             struct_info = analyze_table_structure(main_sheet)
             ctx = extract_structured_table(struct_info)
-            wb = load_workbook(st.session_state["uploaded_path"], data_only=True)
+            
+            # ファイル形式に応じてワークブックを読み込み
+            file_path = Path(st.session_state["uploaded_path"])
+            if file_path.suffix.lower() == ".xls":
+                # .xlsファイルの場合はワークブックをNoneとして扱う
+                wb = None
+            else:
+                # .xlsxファイルの場合のみopenpyxlを使用
+                wb = load_workbook(st.session_state["uploaded_path"], data_only=True)
 
             st.session_state["ctx"] = ctx
             st.session_state["workbook"] = wb
