@@ -79,12 +79,12 @@ if uploaded_file is not None and "structure_done" not in st.session_state:
             
             # ファイル形式に応じてワークブックを読み込み
             file_path = Path(st.session_state["uploaded_path"])
-            if file_path.suffix.lower() == ".xls":
-                # .xlsファイルの場合はワークブックをNoneとして扱う
-                wb = None
-            else:
+            if file_path.suffix.lower() == ".xlsx":
                 # .xlsxファイルの場合のみopenpyxlを使用
                 wb = load_workbook(st.session_state["uploaded_path"], data_only=True)
+            else:
+                # .xlsファイルや.csvファイルの場合はワークブックをNoneとして扱う
+                wb = None
 
             st.session_state["ctx"] = ctx
             st.session_state["workbook"] = wb
