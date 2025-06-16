@@ -109,6 +109,7 @@ class CSVLevel2Checker(BaseLevel2Checker):
         flagged = []
 
         for idx, col in enumerate(df.columns, start=1):
+            # DataFrameではなくSeriesからuniqueを取得
             unique_vals = [
                 str(v).strip() for v in df[col].dropna().unique()
                 if str(v).strip()

@@ -36,7 +36,7 @@ class CSVLevel1Checker(BaseChecker):
     
     def check_no_images_or_objects(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """CSV固有のオブジェクトチェック"""
-        return True, "CSVファイルのためオブジェクトチェック不要"
+        return True, "CSVファイルのため、画像やオブジェクトに関する問題はありません"
     
     def check_one_table_per_sheet(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """CSV固有の複数テーブルチェック"""
@@ -49,7 +49,7 @@ class CSVLevel1Checker(BaseChecker):
     
     def check_no_hidden_rows_or_columns(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """CSV固有の非表示行・列チェック"""
-        return True, "CSVファイルには非表示行・列の概念がありません"
+        return True, "CSVファイルのため、非表示行・列に関する問題はありません"
     
     def check_no_notes_outside_table(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """CSV固有の表外注釈チェック"""
@@ -67,11 +67,11 @@ class CSVLevel1Checker(BaseChecker):
     
     def check_no_merged_cells(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """CSV固有の結合セルチェック"""
-        return True, "CSVファイルには結合セルの概念がありません"
+        return True, "CSVファイルのため、結合セルに関する問題はありません"
     
     def check_no_format_based_semantics(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """CSV固有の書式チェック"""
-        return True, "CSVファイルには書式による意味付けがありません"
+        return True, "CSVファイルのため、書式による意味付けに関する問題はありません"
     
     def check_no_whitespace_formatting(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """CSV固有の空白チェック"""

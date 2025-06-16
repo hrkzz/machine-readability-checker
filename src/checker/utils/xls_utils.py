@@ -58,16 +58,25 @@ def check_xls_merged_cells(
 
 
 def check_xls_cell_formats(file_path: Path, sheet_name: str, data_start: int, data_end: int) -> list:
-    """xlsファイルのセル書式をチェック"""
+    """xlsファイルのセル書式をチェック（座標修正版）"""
     try:
-        logger.debug(f"check_xls_cell_formats: 開始 - {file_path}, sheet: {sheet_name}")
+        logger.debug(f"check_xls_cell_formats: 開始 - {file_path}, sheet: {sheet_name}, data_start: {data_start}, data_end: {data_end}")
         workbook = xlrd.open_workbook(str(file_path), formatting_info=True)
         sheet = workbook.sheet_by_name(sheet_name)
         flagged = []
 
-        for row_idx in range(data_start, min(data_end + 1, sheet.nrows)):
+        # data_startとdata_endは0ベースのDataFrameインデックスなので、
+        # 実際のExcel行番号に変換する必要がある
+        for df_row_idx in range(data_start, min(data_end + 1, len(sheet.rows))):
+            # Excel行番号は df_row_idx + 実際のデータ開始行
+            # ここでは簡易的にdf_row_idx + 2（ヘッダー考慮）とする
+            excel_row_idx = df_row_idx + 2  # 通常、1行目がヘッダー、2行目からデータ
+            
+            if excel_row_idx >= sheet.nrows:
+                break
+                
             for col_idx in range(sheet.ncols):
-                cell = sheet.cell(row_idx, col_idx)
+                cell = sheet.cell(excel_row_idx, col_idx)
                 xf_index = cell.xf_index
 
                 if xf_index >= len(workbook.xf_list):
@@ -80,7 +89,8 @@ def check_xls_cell_formats(file_path: Path, sheet_name: str, data_start: int, da
                     continue
 
                 font = workbook.font_list[font_index]
-                coord = f"{get_excel_column_letter(col_idx + 1)}{row_idx + 1}"
+                # Excel座標（1ベース）で表示
+                coord = f"{get_excel_column_letter(col_idx + 1)}{excel_row_idx + 1}"
 
                 # 太字
                 if font.bold:
@@ -91,14 +101,15 @@ def check_xls_cell_formats(file_path: Path, sheet_name: str, data_start: int, da
                 # 下線
                 if font.underline_type != 0:
                     flagged.append(f"{coord}（下線）")
-                # 文字色
+                # 文字色（デフォルト色以外）
                 if font.colour_index not in (0, 1, 7, 8):  # 自動・黒・白以外
                     flagged.append(f"{coord}（文字色）")
-                # 背景色
+                # 背景色（デフォルト色以外）
                 bg_index = xf.background.pattern_colour_index
                 if bg_index not in (64, 0):  # 標準色以外
                     flagged.append(f"{coord}（背景色）")
 
+        logger.debug(f"書式チェック完了: {len(flagged)}件のフラグ")
         return flagged
 
     except Exception as e:
