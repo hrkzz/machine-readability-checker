@@ -105,12 +105,12 @@ if ctx is not None:
         st.markdown("カラム構造")
         st.write(ctx.columns)
 
-        st.markdown("データ（先頭5行）")
+        st.markdown("データ（先頭10行）")
         try:
-            st.dataframe(ctx.data.head())
+            st.dataframe(ctx.data.head(10))
         except Exception:
             st.warning("⚠️ 表示中にエラーが発生したため、テキスト表示に切り替えます。")
-            st.code(ctx.data.head().to_string(), language="text")
+            st.code(ctx.data.head(10).to_string(), language="text")
 
         if not ctx.upper_annotations.empty:
             st.markdown("上部注釈")

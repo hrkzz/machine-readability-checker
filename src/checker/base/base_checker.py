@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, Optional
-import pandas as pd
 from pathlib import Path
 from loguru import logger
 

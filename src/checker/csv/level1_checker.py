@@ -1,8 +1,6 @@
 from pathlib import Path
 import re
 from typing import Tuple, cast
-import pandas as pd
-from loguru import logger
 
 from src.processor.context import TableContext
 from src.checker.base.base_checker import BaseChecker

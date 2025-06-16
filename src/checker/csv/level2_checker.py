@@ -1,7 +1,5 @@
 from typing import Tuple
 import pandas as pd
-from pathlib import Path
-from loguru import logger
 
 from src.processor.context import TableContext
 from src.checker.base.base_checker import BaseLevel2Checker

@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Union
 
 from .csv.level1_checker import CSVLevel1Checker
 from .csv.level2_checker import CSVLevel2Checker

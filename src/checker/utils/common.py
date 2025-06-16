@@ -2,7 +2,6 @@ import re
 from typing import Any
 import pandas as pd
 import openpyxl
-from loguru import logger
 
 # 共通定数
 MAX_EXAMPLES = 10
