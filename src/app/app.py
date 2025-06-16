@@ -54,7 +54,19 @@ if uploaded_file is not None:
         tmp_file.write(uploaded_file.getbuffer())
         st.session_state["uploaded_path"] = tmp_file.name
 
-    st.info(f"{uploaded_file.name}がアップロードされました。下のボタンを押して構造解析を開始してください。")
+    ext = Path(uploaded_file.name).suffix.lower()
+    if ext == ".xls":
+        st.warning(
+            f"{uploaded_file.name} がアップロードされました。"
+            "下のボタンを押して構造解析を開始してください。"
+            "なお .xls ファイルでは一部の機能（オブジェクト判定など）が利用できない点注意ください。"
+        )
+    else:
+        st.info(
+            f"{uploaded_file.name} がアップロードされました。"
+            "下のボタンを押して構造解析を開始してください。"
+        )
+
 
 # 構造解析の実行ボタン
 if uploaded_file is not None and "structure_done" not in st.session_state:
