@@ -59,7 +59,7 @@ if uploaded_file is not None:
         st.warning(
             f"{uploaded_file.name} がアップロードされました。"
             "下のボタンを押して構造解析を開始してください。"
-            "なお .xls ファイルでは一部の機能（オブジェクト判定など）が利用できない点注意ください。"
+            "なお .xls ファイルでは一部の機能（オブジェクト判定など）が利用できません。"
         )
     else:
         st.info(

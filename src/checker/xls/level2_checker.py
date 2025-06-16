@@ -105,14 +105,40 @@ class XLSLevel2Checker(BaseLevel2Checker):
     
     def check_handling_of_missing_values(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """XLS専用の欠損値の統一性チェック"""
+        self.logger.debug(f"XLS Level2 欠損値チェック開始: {filepath}")
         df = ctx.data
         flagged = []
 
         for idx, col in enumerate(df.columns, start=1):
-            unique_vals = [
-                str(v).strip() for v in df[col].dropna().unique()
-                if str(v).strip()
-            ]
+            self.logger.debug(f"列 '{col}' ({idx}) を処理中")
+            
+            # 明示的にSeriesとして取得してuniqueを呼び出す
+            column_series = df[col]
+            if isinstance(column_series, pd.DataFrame):
+                # 万一DataFrameが返される場合はスキップ
+                self.logger.warning(f"列 '{col}' が DataFrame として取得されました。スキップします。")
+                continue
+            
+            self.logger.debug(f"列 '{col}' の型: {type(column_series)}")
+            
+            try:
+                # より安全なユニーク値の取得
+                if hasattr(column_series, 'dropna') and hasattr(column_series, 'unique'):
+                    unique_vals = [
+                        str(v).strip() for v in column_series.dropna().unique()
+                        if str(v).strip()
+                    ]
+                else:
+                    # 直接的なアプローチが失敗した場合の代替手段
+                    unique_vals = [
+                        str(v).strip() for v in pd.Series(column_series).dropna().unique()
+                        if str(v).strip()
+                    ]
+                self.logger.debug(f"列 '{col}' のユニーク値数: {len(unique_vals)}")
+            except Exception as e:
+                self.logger.error(f"列 '{col}' のユニーク値取得でエラー: {e}")
+                continue
+            
             if not unique_vals:
                 continue
 
@@ -137,6 +163,7 @@ class XLSLevel2Checker(BaseLevel2Checker):
             if "欠損表現あり" in res:
                 flagged.append(f"{col}（列: {get_excel_column_letter(idx)}）")
 
+        self.logger.debug(f"XLS Level2 欠損値チェック完了: フラグ数={len(flagged)}")
         if flagged:
             return False, f"欠損表現が不統一な可能性のある列が見つかりました: {flagged}"
         return True, "全列の欠損表現は一貫しています" 
