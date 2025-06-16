@@ -40,50 +40,32 @@ def load_file(file_path: Path) -> Dict[str, Any]:
             "preview_bottom": df.tail(PREVIEW_ROW_COUNT),
         })
     elif suffix == ".xls":
-        # .xls形式の場合はxlrdエンジンを使用
+        # .xls形式はxlrd 1.2.0で処理する（pandasを使わない）
         logger.info(f"=== .xls ファイル読み込み開始: {file_path} ===")
         try:
-            # xlrdライブラリを直接使用してファイル情報を確認
-            wb = xlrd.open_workbook(str(file_path))
+            wb = xlrd.open_workbook(str(file_path), formatting_info=True)
             logger.info(f"xlrdで開いたワークブック: {wb.nsheets} シート")
-            
-            # まずはシート名を取得
-            xl_file = pd.ExcelFile(file_path, engine='xlrd')
-            logger.info(f"pandasで取得したシート名: {xl_file.sheet_names}")
-            
-            for sheet_name in xl_file.sheet_names:
-                logger.info(f"=== シート '{sheet_name}' を処理中 ===")
-                try:
-                    # xlrdで直接シート情報を確認
-                    sheet = wb.sheet_by_name(sheet_name)
-                    logger.info(f"xlrd情報: {sheet.nrows} 行, {sheet.ncols} 列")
-                    
-                    # ヘッダーは後で LLM が判定するため、ここでは header=None
-                    df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine='xlrd')
-                    logger.info(f"pandas読み込み完了: shape={df.shape}")
-                    
-                    if not df.empty:
-                        logger.debug(f"データサンプル (先頭3行):\n{df.head(3)}")
-                        logger.debug(f"データサンプル (データ型):\n{df.dtypes.head(10)}")
-                    
-                except Exception as e:
-                    logger.error(f"シート '{sheet_name}' の読み込みでエラー: {e}")
-                    logger.exception("詳細なエラー情報:")
-                    # 読み込みに失敗した場合は空 DataFrame
-                    df = pd.DataFrame()
+
+            for sheet in wb.sheets():
+                logger.info(f"=== シート '{sheet.name}' を処理中 ===")
+                rows = []
+                for row_idx in range(sheet.nrows):
+                    row = sheet.row_values(row_idx)
+                    rows.append(row)
+
+                df = pd.DataFrame(rows)
+                logger.info(f"xlrdで構築したDataFrame: shape={df.shape}")
 
                 result["sheets"].append({
-                    "sheet_name": sheet_name,
+                    "sheet_name": sheet.name,
                     "dataframe": df,
                     "preview_top": df.head(PREVIEW_ROW_COUNT),
                     "preview_bottom": df.tail(PREVIEW_ROW_COUNT),
                 })
-                logger.info(f"最終的なDataFrame shape: {df.shape}")
-                
+
         except Exception as e:
-            logger.error(f"xlsファイル全体の読み込みでエラー: {e}")
+            logger.error(f".xls読み込みでエラー: {e}")
             logger.exception("詳細なエラー情報:")
-            # xlsファイル全体の読み込みに失敗した場合
             result["sheets"].append({
                 "sheet_name": "Sheet1",
                 "dataframe": pd.DataFrame(),

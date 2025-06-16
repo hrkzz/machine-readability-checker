@@ -18,24 +18,31 @@ from src.llm.llm_client import call_llm
 logger.add("logs/checker1.log", rotation="10 MB", retention="30 days", level="DEBUG")
 
 
-def check_xls_merged_cells(file_path: Path) -> list:
-    """xlsファイルの結合セルをチェック"""
+def check_xls_merged_cells(
+    file_path: Path,
+    sheet_name: str,
+    row_start: int,
+    row_end: int
+) -> list:
+    """xlsファイルの結合セルをチェック（指定範囲内のみ）"""
     try:
-        workbook = xlrd.open_workbook(str(file_path))
+        wb = xlrd.open_workbook(str(file_path), formatting_info=True)
+        sheet = wb.sheet_by_name(sheet_name)
         merged_cells = []
-        
-        for sheet_name in workbook.sheet_names():
-            sheet = workbook.sheet_by_name(sheet_name)
-            if hasattr(sheet, 'merged_cells'):
-                for row_start, row_end, col_start, col_end in sheet.merged_cells:
-                    merged_cells.append({
-                        'sheet': sheet_name,
-                        'range': f"{row_start}:{row_end-1}, {col_start}:{col_end-1}"
-                    })
-        
+
+        # xlrdのmerged_cellsは (r0, r1, c0, c1) 形式。r1/c1 は「1つ先」のインデックス。
+        for r0, r1, c0, c1 in getattr(sheet, 'merged_cells', []):
+            last_row = r1 - 1
+            # テーブル本体の行範囲内かどうか
+            if r0 >= row_start and last_row <= row_end:
+                top_left  = f"{get_excel_column_letter(c0 + 1)}{r0 + 1}"
+                bottom_right = f"{get_excel_column_letter(c1)}{r1}"
+                merged_cells.append(f"{top_left}:{bottom_right}")
+
         return merged_cells
+
     except Exception as e:
-        logger.error(f"結合セルチェックでエラー: {e}")
+        logger.error(f"check_xls_merged_cells エラー ({sheet_name}): {e}")
         return []
 
 
@@ -312,13 +319,23 @@ def check_no_notes_outside_table(
 def check_no_merged_cells(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
-    # .xlsファイルの場合はxlrdを使用してチェック
+    # .xls は workbook=None になるためこちら
     if workbook is None:
-        merged_ranges = check_xls_merged_cells(Path(filepath))
-        
-        if merged_ranges:
-            return False, f"結合セルが検出されました: {merged_ranges}"
-        return True, "結合セルはありません"
+        # テーブル本体の開始・終了行を ctx から取得
+        column_rows = ctx.row_indices.get("column_rows")
+        data_end    = ctx.row_indices.get("data_end")
+        if column_rows is None or data_end is None:
+            return False, "結合セルチェックに必要な情報が不足しています"
+
+        start = min(column_rows) if isinstance(column_rows, list) else cast(int, column_rows)
+        end   = cast(int, data_end)
+
+        merged = check_xls_merged_cells(Path(filepath), ctx.sheet_name, start, end)
+        if merged:
+            return False, f"結合セルが検出されました: {merged}"
+        else:
+            return True, "結合セルはありません"
+
     
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
