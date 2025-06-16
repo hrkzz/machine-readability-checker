@@ -1,5 +1,7 @@
 streamlit==1.32.0
 pandas==2.2.1
 openpyxl==3.1.2
+xlrd==2.0.1
 openai>=1.61.0
 litellm==1.61.8
+loguru==0.7.2

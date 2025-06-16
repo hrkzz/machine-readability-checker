@@ -3,6 +3,8 @@ import pandas as pd
 import json
 import re
 import textwrap
+import xlrd
+from loguru import logger
 
 from src.config import PREVIEW_ROW_COUNT
 from src.llm.llm_client import call_llm
@@ -39,6 +41,20 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
     """
     df = sheet["dataframe"]
     total_rows = df.shape[0]
+    
+    # データが空の場合のデフォルト処理
+    if total_rows == 0:
+        return {
+            "sheet_name": sheet["sheet_name"],
+            "dataframe": df,
+            "structure_response": {
+                "column_rows": [1],
+                "data_start": 2,
+                "data_end": 1,
+                "annotation_rows": []
+            }
+        }
+    
     top = sheet["preview_top"].fillna("").astype(str).values.tolist()
     bot = sheet["preview_bottom"].fillna("").astype(str).values.tolist()
     content = "\n".join(",".join(row) for row in (top + [["..."]] + bot))
@@ -97,23 +113,62 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
 
     """)
 
-    raw_response = call_llm(prompt)
+    try:
+        raw_response = call_llm(prompt)
 
-    # JSON部分だけ抽出（```json ... ``` 形式のガードを削除）
-    match = re.search(r"{[\s\S]+}", raw_response)
-    if match:
-        try:
-            parsed = json.loads(match.group())
-        except json.JSONDecodeError as e:
-            raise ValueError(f"構造解析のレスポンスがJSONとして解析できません: {e}")
-    else:
-        raise ValueError("構造解析レスポンスからJSONを抽出できませんでした")
+        # JSON部分だけ抽出（```json ... ``` 形式のガードを削除）
+        match = re.search(r"{[\s\S]+}", raw_response)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON解析エラー: {e}")
+                logger.debug(f"レスポンス: {raw_response}")
+                raise ValueError(f"構造解析のレスポンスがJSONとして解析できません: {e}")
+        else:
+            logger.error(f"JSON抽出失敗。レスポンス: {raw_response}")
+            raise ValueError("構造解析レスポンスからJSONを抽出できませんでした")
 
-    return {
-        "sheet_name": sheet["sheet_name"],
-        "dataframe": df,
-        "structure_response": parsed  # ← JSONそのものを格納
-    }
+        # 必要なフィールドの検証
+        required_fields = ["column_rows", "data_start", "data_end"]
+        for field in required_fields:
+            if field not in parsed or parsed[field] is None:
+                logger.error(f"必要フィールド不足: {field}")
+                raise ValueError(f"必要なフィールドが不足: {field}")
+
+        return {
+            "sheet_name": sheet["sheet_name"],
+            "dataframe": df,
+            "structure_response": parsed  # ← JSONそのものを格納
+        }
+        
+    except Exception as e:
+        logger.error(f"構造解析でエラーが発生しました: {e}")
+        logger.info("デフォルトの構造を適用します")
+        
+        # フォールバック: シンプルなデフォルト構造を適用
+        if total_rows <= 2:
+            # 非常に小さなデータセット
+            default_structure = {
+                "column_rows": [1],  # 1行目をヘッダーとする
+                "data_start": 2 if total_rows >= 2 else 1,     # 2行目からデータ開始（または1行目）
+                "data_end": total_rows,  # 最終行まで
+                "annotation_rows": []
+            }
+        else:
+            # 通常のデータセット
+            default_structure = {
+                "column_rows": [1],  # 1行目をヘッダーとする
+                "data_start": 2,     # 2行目からデータ開始
+                "data_end": min(total_rows, 100),  # 最大100行または総行数まで
+                "annotation_rows": []
+            }
+        
+        return {
+            "sheet_name": sheet["sheet_name"],
+            "dataframe": df,
+            "structure_response": default_structure
+        }
 
 
 def extract_structured_table(info: Dict[str, Any]) -> TableContext:
@@ -133,22 +188,111 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
         try:
             parsed = json.loads(js)
         except json.JSONDecodeError as e:
-            print("=== JSONパース失敗 ===")
-            print(raw_resp)
+            logger.error("=== JSONパース失敗 ===")
+            logger.debug(raw_resp)
             raise ValueError(f"構造出力のパースに失敗しました: {e}")
 
+    # 必要なフィールドの存在確認とデバッグ情報出力
+    required_fields = ["column_rows", "data_start", "data_end"]
+    missing_fields = []
+    for field in required_fields:
+        if field not in parsed or parsed[field] is None:
+            missing_fields.append(field)
+    
+    if missing_fields:
+        logger.debug("=== 構造解析レスポンスのデバッグ情報 ===")
+        logger.debug(f"パース結果: {parsed}")
+        logger.debug(f"不足フィールド: {missing_fields}")
+        raise ValueError(f"構造解析で必要なフィールドが不足しています: {missing_fields}")
+
     # インデックス（0-based）に調整
-    column_rows = [i - 1 for i in parsed["column_rows"]]
+    column_rows = [i - 1 for i in parsed["column_rows"]] if isinstance(parsed["column_rows"], list) else [parsed["column_rows"] - 1]
     data_start   = parsed["data_start"] - 1
     data_end     = parsed["data_end"]   - 1
     annotations  = [i - 1 for i in parsed.get("annotation_rows", [])]
 
     df = info["dataframe"]
 
+    # データが非常に少ない場合の特別処理
+    if len(df) <= 1:
+        logger.info(f"=== 非常に小さなデータセット (行数: {len(df)}) ===")
+        # 1行以下の場合はすべてをヘッダーとして処理
+        return TableContext(
+            sheet_name=info["sheet_name"],
+            data=pd.DataFrame(),  # 空のデータ
+            columns=df.iloc[0].tolist() if len(df) == 1 else [],
+            upper_annotations=pd.DataFrame(),
+            lower_annotations=pd.DataFrame(),
+            row_indices={
+                "column_rows": [0] if len(df) == 1 else [],
+                "data_start": 0,
+                "data_end": -1,  # データなし
+                "annotations": []
+            }
+        )
+
+    # データ範囲の妥当性チェック
+    if data_start < 0 or data_end < 0 or data_start > data_end:
+        logger.warning(f"=== データ範囲エラー（修正前） ===")
+        logger.debug(f"data_start: {data_start}, data_end: {data_end}, df.shape: {df.shape}")
+        
+        # 自動修正を試行
+        if data_start > data_end:
+            # data_startがdata_endより大きい場合、data_endを調整
+            data_end = max(data_start, len(df) - 1)
+            logger.debug(f"data_endを修正: {data_end}")
+        
+        if data_start < 0:
+            data_start = 0
+            logger.debug(f"data_startを修正: {data_start}")
+        
+        if data_end < 0:
+            data_end = len(df) - 1
+            logger.debug(f"data_endを修正: {data_end}")
+        
+        # まだ不正な場合はデフォルト値を設定
+        if data_start > data_end or data_end >= len(df):
+            logger.warning("デフォルト値を適用")
+            if len(column_rows) > 0:
+                data_start = max(column_rows) + 1
+                data_end = len(df) - 1
+            else:
+                data_start = 1
+                data_end = len(df) - 1
+            
+            # 境界チェック
+            data_start = min(data_start, len(df) - 1)
+            data_end = min(data_end, len(df) - 1)
+            data_start = max(data_start, 0)
+            data_end = max(data_end, data_start)
+        
+        logger.info(f"修正後: data_start={data_start}, data_end={data_end}")
+        
+        # まだ不正な場合はエラー
+        if data_start > data_end:
+            raise ValueError(f"データ範囲の修正に失敗しました: data_start={data_start}, data_end={data_end}")
+
+    # column_rowsの妥当性チェック
+    if not column_rows or min(column_rows) < 0 or max(column_rows) >= len(df):
+        logger.warning(f"=== カラム行エラー ===")
+        logger.debug(f"column_rows: {column_rows}, df.shape: {df.shape}")
+        
+        # 自動修正
+        if not column_rows:
+            column_rows = [0]  # デフォルトで1行目をヘッダー
+        else:
+            # 範囲外の値を修正
+            column_rows = [max(0, min(row, len(df) - 1)) for row in column_rows]
+        
+        logger.debug(f"修正後のcolumn_rows: {column_rows}")
+        
+        if not column_rows or min(column_rows) < 0 or max(column_rows) >= len(df):
+            raise ValueError(f"カラム行の範囲修正に失敗しました: column_rows={column_rows}")
+
     # 上部注釈（ヘッダー行より上）
-    upper = df.iloc[:min(column_rows)].copy()
+    upper = df.iloc[:min(column_rows)].copy() if column_rows else pd.DataFrame()
     # 下部注釈（データ行の下）
-    lower = df.iloc[data_end + 1:].copy()
+    lower = df.iloc[data_end + 1:].copy() if data_end + 1 < len(df) else pd.DataFrame()
 
     # カラム行の抽出
     col_df = df.iloc[column_rows].fillna("").astype(str)
@@ -170,7 +314,21 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
         cols = col_df.iloc[0].tolist()
 
     # 実データ部分を切り出し
-    data = df.iloc[data_start : data_end + 1].copy()
+    if data_start <= data_end and data_start < len(df) and data_end < len(df):
+        data = df.iloc[data_start : data_end + 1].copy()
+    else:
+        logger.warning(f"=== データ切り出しでデフォルト処理 ===")
+        logger.debug(f"data_start: {data_start}, data_end: {data_end}, df.shape: {df.shape}")
+        # デフォルト: ヘッダー行以降すべてをデータとする
+        if column_rows:
+            start_idx = max(column_rows) + 1
+            if start_idx < len(df):
+                data = df.iloc[start_idx:].copy()
+            else:
+                data = pd.DataFrame()  # 空のデータフレーム
+        else:
+            data = df.copy()  # 全体をデータとする
+    
     data.columns = cols
     data.reset_index(drop=True, inplace=True)
 

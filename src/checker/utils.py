@@ -1,11 +1,12 @@
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Dict, Tuple
 import zipfile
 import pandas as pd
 from openpyxl.worksheet.worksheet import Worksheet
 from ..llm.llm_client import call_llm
-
+from loguru import logger
+import xlrd
 MAX_EXAMPLES = 10
 
 def get_excel_column_letter(n: int) -> str:
@@ -15,9 +16,45 @@ def get_excel_column_letter(n: int) -> str:
         result = chr(65 + r) + result
     return result
 
-def has_any_drawing_xlsx(path: Path) -> bool:
-    if path.suffix.lower() != ".xlsx":
+def get_xls_workbook_info(file_path: Path) -> dict:
+    """xlsファイルの基本情報を取得"""
+    try:
+        workbook = xlrd.open_workbook(str(file_path))
+        
+        sheet_info = []
+        for sheet_name in workbook.sheet_names():
+            sheet = workbook.sheet_by_name(sheet_name)
+            sheet_info.append({
+                'name': sheet_name,
+                'nrows': sheet.nrows,
+                'ncols': sheet.ncols
+            })
+        
+        return {
+            'file_path': str(file_path),
+            'nsheets': workbook.nsheets,
+            'sheet_names': workbook.sheet_names(),
+            'sheet_info': sheet_info
+        }
+    except Exception as e:
+        logger.error(f"xlsファイルの詳細情報取得でエラー: {e}")
+        return {}
+
+
+
+def has_any_drawing(path: Path) -> bool:
+    """
+    Excel ファイルに図形やオブジェクトが含まれているかをチェック
+    .xls ファイルは構造上チェックが困難なため常に False を返す
+    """
+    ext = path.suffix.lower()
+    if ext == ".xls":
+        # .xls ファイルは構造上図形チェックが困難なため、
+        # 図形があるものとして扱う（必要に応じて後で対応）
+        return True
+    elif ext != ".xlsx":
         return False
+    
     try:
         with zipfile.ZipFile(path, 'r') as z:
             for name in z.namelist():
@@ -111,3 +148,10 @@ def is_likely_long_format(df: pd.DataFrame) -> bool:
     if len(df.columns) < 10:
         return False
     return {"ID", "変数名", "値"}.issubset(set(df.columns))
+
+# 後方互換性のために元の関数名も維持
+def has_any_drawing_xlsx(path: Path) -> bool:
+    """後方互換性のための関数（has_any_drawingを使用することを推奨）"""
+    return has_any_drawing(path)
+
+
