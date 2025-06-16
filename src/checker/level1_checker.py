@@ -36,7 +36,7 @@ def check_no_images_or_objects(
     elif ext == ".xls":
         # .xlsファイルでは図形・オブジェクトの詳細検出は困難だが、
         # 一般的に統計表では図形は使用されないため、警告として扱う
-        return True, "xlsファイルでは図形・オブジェクトの検出は困難ですが、一般的に統計表では使用されません"
+        return False, "xlsファイルでは図形・オブジェクトの検出は困難ですが、一般的に統計表では使用されません"
     elif ext == ".xlsx":
         if has_any_drawing_xlsx(path):
             return False, "図形・テキストボックスが検出されました"

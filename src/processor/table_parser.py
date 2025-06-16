@@ -4,6 +4,7 @@ import json
 import re
 import textwrap
 import xlrd
+from loguru import logger
 
 from src.config import PREVIEW_ROW_COUNT
 from src.llm.llm_client import call_llm
@@ -121,18 +122,18 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
             try:
                 parsed = json.loads(match.group())
             except json.JSONDecodeError as e:
-                print(f"JSON解析エラー: {e}")
-                print(f"レスポンス: {raw_response}")
+                logger.error(f"JSON解析エラー: {e}")
+                logger.debug(f"レスポンス: {raw_response}")
                 raise ValueError(f"構造解析のレスポンスがJSONとして解析できません: {e}")
         else:
-            print(f"JSON抽出失敗。レスポンス: {raw_response}")
+            logger.error(f"JSON抽出失敗。レスポンス: {raw_response}")
             raise ValueError("構造解析レスポンスからJSONを抽出できませんでした")
 
         # 必要なフィールドの検証
         required_fields = ["column_rows", "data_start", "data_end"]
         for field in required_fields:
             if field not in parsed or parsed[field] is None:
-                print(f"必要フィールド不足: {field}")
+                logger.error(f"必要フィールド不足: {field}")
                 raise ValueError(f"必要なフィールドが不足: {field}")
 
         return {
@@ -142,8 +143,8 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        print(f"構造解析でエラーが発生しました: {e}")
-        print("デフォルトの構造を適用します")
+        logger.error(f"構造解析でエラーが発生しました: {e}")
+        logger.info("デフォルトの構造を適用します")
         
         # フォールバック: シンプルなデフォルト構造を適用
         if total_rows <= 2:
@@ -187,8 +188,8 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
         try:
             parsed = json.loads(js)
         except json.JSONDecodeError as e:
-            print("=== JSONパース失敗 ===")
-            print(raw_resp)
+            logger.error("=== JSONパース失敗 ===")
+            logger.debug(raw_resp)
             raise ValueError(f"構造出力のパースに失敗しました: {e}")
 
     # 必要なフィールドの存在確認とデバッグ情報出力
@@ -199,9 +200,9 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
             missing_fields.append(field)
     
     if missing_fields:
-        print("=== 構造解析レスポンスのデバッグ情報 ===")
-        print(f"パース結果: {parsed}")
-        print(f"不足フィールド: {missing_fields}")
+        logger.debug("=== 構造解析レスポンスのデバッグ情報 ===")
+        logger.debug(f"パース結果: {parsed}")
+        logger.debug(f"不足フィールド: {missing_fields}")
         raise ValueError(f"構造解析で必要なフィールドが不足しています: {missing_fields}")
 
     # インデックス（0-based）に調整
@@ -214,7 +215,7 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
 
     # データが非常に少ない場合の特別処理
     if len(df) <= 1:
-        print(f"=== 非常に小さなデータセット (行数: {len(df)}) ===")
+        logger.info(f"=== 非常に小さなデータセット (行数: {len(df)}) ===")
         # 1行以下の場合はすべてをヘッダーとして処理
         return TableContext(
             sheet_name=info["sheet_name"],
@@ -232,26 +233,26 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
 
     # データ範囲の妥当性チェック
     if data_start < 0 or data_end < 0 or data_start > data_end:
-        print(f"=== データ範囲エラー（修正前） ===")
-        print(f"data_start: {data_start}, data_end: {data_end}, df.shape: {df.shape}")
+        logger.warning(f"=== データ範囲エラー（修正前） ===")
+        logger.debug(f"data_start: {data_start}, data_end: {data_end}, df.shape: {df.shape}")
         
         # 自動修正を試行
         if data_start > data_end:
             # data_startがdata_endより大きい場合、data_endを調整
             data_end = max(data_start, len(df) - 1)
-            print(f"data_endを修正: {data_end}")
+            logger.debug(f"data_endを修正: {data_end}")
         
         if data_start < 0:
             data_start = 0
-            print(f"data_startを修正: {data_start}")
+            logger.debug(f"data_startを修正: {data_start}")
         
         if data_end < 0:
             data_end = len(df) - 1
-            print(f"data_endを修正: {data_end}")
+            logger.debug(f"data_endを修正: {data_end}")
         
         # まだ不正な場合はデフォルト値を設定
         if data_start > data_end or data_end >= len(df):
-            print("デフォルト値を適用")
+            logger.warning("デフォルト値を適用")
             if len(column_rows) > 0:
                 data_start = max(column_rows) + 1
                 data_end = len(df) - 1
@@ -265,7 +266,7 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
             data_start = max(data_start, 0)
             data_end = max(data_end, data_start)
         
-        print(f"修正後: data_start={data_start}, data_end={data_end}")
+        logger.info(f"修正後: data_start={data_start}, data_end={data_end}")
         
         # まだ不正な場合はエラー
         if data_start > data_end:
@@ -273,8 +274,8 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
 
     # column_rowsの妥当性チェック
     if not column_rows or min(column_rows) < 0 or max(column_rows) >= len(df):
-        print(f"=== カラム行エラー ===")
-        print(f"column_rows: {column_rows}, df.shape: {df.shape}")
+        logger.warning(f"=== カラム行エラー ===")
+        logger.debug(f"column_rows: {column_rows}, df.shape: {df.shape}")
         
         # 自動修正
         if not column_rows:
@@ -283,7 +284,7 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
             # 範囲外の値を修正
             column_rows = [max(0, min(row, len(df) - 1)) for row in column_rows]
         
-        print(f"修正後のcolumn_rows: {column_rows}")
+        logger.debug(f"修正後のcolumn_rows: {column_rows}")
         
         if not column_rows or min(column_rows) < 0 or max(column_rows) >= len(df):
             raise ValueError(f"カラム行の範囲修正に失敗しました: column_rows={column_rows}")
@@ -316,8 +317,8 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
     if data_start <= data_end and data_start < len(df) and data_end < len(df):
         data = df.iloc[data_start : data_end + 1].copy()
     else:
-        print(f"=== データ切り出しでデフォルト処理 ===")
-        print(f"data_start: {data_start}, data_end: {data_end}, df.shape: {df.shape}")
+        logger.warning(f"=== データ切り出しでデフォルト処理 ===")
+        logger.debug(f"data_start: {data_start}, data_end: {data_end}, df.shape: {df.shape}")
         # デフォルト: ヘッダー行以降すべてをデータとする
         if column_rows:
             start_idx = max(column_rows) + 1
