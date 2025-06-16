@@ -156,7 +156,9 @@ def check_valid_file_format(
     ext = Path(filepath).suffix.lower()
     if ext not in {".csv", ".xlsx", ".xls"}:
         return False, f"サポート外のファイル形式です: {ext}"
-    return True, "ファイル形式はCSV、Excel（.xlsx）、または旧Excel（.xls）です"
+    elif ext == ".xls":
+        return True, "旧Excel（.xls）形式のため、一部の自動チェック（書式・図形など）が制限されます。必要に応じて目視での確認を行ってください"
+    return True, "ファイル形式はCSVまたはExcel（.xlsx）です"
 
 
 def check_no_images_or_objects(
