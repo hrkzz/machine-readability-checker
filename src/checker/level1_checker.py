@@ -2,6 +2,9 @@ from pathlib import Path
 import re
 from typing import Tuple, cast
 from openpyxl.workbook.workbook import Workbook
+import pandas as pd
+import xlrd
+from loguru import logger
 
 from src.processor.context import TableContext
 from src.checker.utils import (
@@ -9,12 +12,142 @@ from src.checker.utils import (
     detect_platform_characters,
     get_excel_column_letter,
     MAX_EXAMPLES,
-    check_xls_hidden_rows_columns,
-    check_xls_merged_cells,
-    check_xls_cell_formats,
-    detect_multiple_tables_dataframe,
 )
 from src.llm.llm_client import call_llm
+
+logger.add("logs/checker1.log", rotation="10 MB", retention="30 days", level="DEBUG")
+
+
+def check_xls_merged_cells(file_path: Path) -> list:
+    """xlsファイルの結合セルをチェック"""
+    try:
+        workbook = xlrd.open_workbook(str(file_path))
+        merged_cells = []
+        
+        for sheet_name in workbook.sheet_names():
+            sheet = workbook.sheet_by_name(sheet_name)
+            if hasattr(sheet, 'merged_cells'):
+                for row_start, row_end, col_start, col_end in sheet.merged_cells:
+                    merged_cells.append({
+                        'sheet': sheet_name,
+                        'range': f"{row_start}:{row_end-1}, {col_start}:{col_end-1}"
+                    })
+        
+        return merged_cells
+    except Exception as e:
+        logger.error(f"結合セルチェックでエラー: {e}")
+        return []
+
+
+def check_xls_cell_formats(file_path: Path, sheet_name: str, data_start: int, data_end: int) -> list:
+    """xlsファイルのセル書式をチェック（修正版）"""
+    try:
+        logger.debug(f"check_xls_cell_formats: 開始 - {file_path}, sheet: {sheet_name}")
+        workbook = xlrd.open_workbook(str(file_path), formatting_info=True)
+        sheet = workbook.sheet_by_name(sheet_name)
+        flagged = []
+
+        for row_idx in range(data_start, min(data_end + 1, sheet.nrows)):
+            for col_idx in range(sheet.ncols):
+                cell = sheet.cell(row_idx, col_idx)
+                xf_index = cell.xf_index
+
+                if xf_index >= len(workbook.xf_list):
+                    continue  # 異常なインデックスはスキップ
+
+                xf = workbook.xf_list[xf_index]
+                font_index = xf.font_index
+
+                if font_index >= len(workbook.font_list):
+                    continue
+
+                font = workbook.font_list[font_index]
+                coord = f"{get_excel_column_letter(col_idx + 1)}{row_idx + 1}"
+
+                # 太字
+                if font.bold:
+                    flagged.append(f"{coord}（太字）")
+                # イタリック
+                if font.italic:
+                    flagged.append(f"{coord}（イタリック）")
+                # 下線
+                if font.underline_type != 0:
+                    flagged.append(f"{coord}（下線）")
+                # 文字色
+                if font.colour_index not in (0, 1, 7, 8):  # 自動・黒・白以外
+                    flagged.append(f"{coord}（文字色）")
+                # 背景色
+                bg_index = xf.background.pattern_colour_index
+                if bg_index not in (64, 0):  # 標準色以外
+                    flagged.append(f"{coord}（背景色）")
+
+        return flagged
+
+    except Exception as e:
+        logger.exception(f"書式チェックでエラー: {e}")
+        return []
+
+def detect_multiple_tables_dataframe(df: pd.DataFrame, sheet_name: str = "") -> tuple:
+    """
+    DataFrameベースで複数テーブルを検出する
+    
+    Args:
+        df: 対象のDataFrame
+        sheet_name: シート名（ログ用）
+    
+    Returns:
+        tuple: (has_multiple_tables: bool, details: str)
+    """
+    try:
+        if df.empty or len(df) < 3:
+            return False, "データが少ないため複数テーブルの検出をスキップ"
+        
+        # 完全に空の行を検索
+        empty_rows = []
+        for idx, row in df.iterrows():
+            if row.isna().all() or (row.astype(str).str.strip() == "").all():
+                empty_rows.append(idx)
+        
+        # 連続する空行を検索（テーブル区切りの可能性）
+        if len(empty_rows) > 0:
+            consecutive_groups = []
+            current_group = [empty_rows[0]]
+            
+            for i in range(1, len(empty_rows)):
+                if empty_rows[i] == empty_rows[i-1] + 1:
+                    current_group.append(empty_rows[i])
+                else:
+                    if len(current_group) >= 2:  # 2行以上の連続空行
+                        consecutive_groups.append(current_group)
+                    current_group = [empty_rows[i]]
+            
+            if len(current_group) >= 2:
+                consecutive_groups.append(current_group)
+            
+            if consecutive_groups:
+                return True, f"複数の連続空行グループが見つかりました: {len(consecutive_groups)}箇所"
+        
+        # ヘッダー様の行の検出
+        header_like_rows = []
+        for idx, row in df.iterrows():
+            non_na_values = row.dropna().astype(str).str.strip()
+            if len(non_na_values) > 0:
+                # 数値以外が多い行をヘッダー候補とする
+                numeric_count = sum(1 for val in non_na_values if val.replace('.', '').replace('-', '').isdigit())
+                if numeric_count / len(non_na_values) < 0.5:
+                    header_like_rows.append(idx)
+        
+        # 複数のヘッダー様行が離れて存在する場合
+        if len(header_like_rows) >= 2:
+            gaps = [header_like_rows[i+1] - header_like_rows[i] for i in range(len(header_like_rows)-1)]
+            if any(gap > 3 for gap in gaps):  # 3行以上離れたヘッダーがある
+                return True, f"離れた位置に複数のヘッダー様行が検出されました: {header_like_rows}"
+        
+        return False, "単一テーブルと判定"
+        
+    except Exception as e:
+        logger.error(f"複数テーブル検出でエラー: {e}")
+        return False, f"検出処理でエラーが発生: {str(e)}"
 
 
 def check_valid_file_format(
@@ -50,22 +183,11 @@ def check_one_table_per_sheet(
 ) -> Tuple[bool, str]:
     # .xlsファイルの場合はDataFrameベースでチェック
     if workbook is None:
-        column_rows = ctx.row_indices.get("column_rows", [])
-        data_start = ctx.row_indices.get("data_start", 0)
-        data_end = ctx.row_indices.get("data_end", len(ctx.data) - 1)
-        
-        if not column_rows or data_start is None or data_end is None:
-            return False, "テーブル構造情報が不足しているためチェックできません"
-        
-        # DataFrameの元データを使用（構造解析前のデータ）
-        # ctx.dataは既に構造解析後なので、loaderから取得した生データを使用したい
-        # とりあえず現在のデータで分析
-        is_multiple, block_count = detect_multiple_tables_dataframe(
-            ctx.data, column_rows, 0, len(ctx.data) - 1
-        )
+        # 元のDataFrameを使用して複数テーブル検出
+        is_multiple, details = detect_multiple_tables_dataframe(ctx.data, ctx.sheet_name)
         
         if is_multiple:
-            return False, f"複数テーブルの疑いがあります（検出ブロック数: {block_count}）"
+            return False, f"複数テーブルの疑いがあります: {details}"
         return True, "1つのテーブルのみです"
     
     ws = workbook[ctx.sheet_name]
@@ -97,26 +219,73 @@ def check_one_table_per_sheet(
     return True, "1つのテーブルのみです"
 
 
+def check_xls_hidden_rows_columns(file_path: Path) -> tuple:
+    """xlsファイルの非表示行・列をチェック（修正版）"""
+    try:
+        logger.debug(f"check_xls_hidden_rows_columns: 開始 - {file_path}")
+        workbook = xlrd.open_workbook(str(file_path), formatting_info=True)
+        hidden_rows = []
+        hidden_cols = []
+
+        for sheet_name in workbook.sheet_names():
+            logger.debug(f"シート処理中: {sheet_name}")
+            sheet = workbook.sheet_by_name(sheet_name)
+
+            # 行の高さが0 → 非表示
+            for row_idx in range(sheet.nrows):
+                rowinfo = sheet.rowinfo_map.get(row_idx)
+                if rowinfo:
+                    logger.debug(f"  row {row_idx}: height={rowinfo.height}")
+                if rowinfo and rowinfo.height == 0:
+                    logger.info(f"  非表示行検出: {sheet_name} 行{row_idx}")
+                    hidden_rows.append((sheet_name, row_idx))
+
+            # 列の幅が0 → 非表示（colinfo_map は sheet 単位）
+            for col_idx, colinfo in sheet.colinfo_map.items():
+                logger.debug(f"  col {col_idx}: width={colinfo.width}")
+                if colinfo.width == 0:
+                    logger.info(f"  非表示列検出: {sheet_name} 列{col_idx}")
+                    hidden_cols.append((sheet_name, col_idx))
+
+        return hidden_rows, hidden_cols
+
+    except Exception as e:
+        logger.exception(f"非表示行・列チェックでエラー: {e}")
+        return [], []
+
+
 def check_no_hidden_rows_or_columns(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
-    # .xlsファイルの場合はxlrdを使用してチェック
     if workbook is None:
-        hidden_rows, hidden_cols = check_xls_hidden_rows_columns(Path(filepath), ctx.sheet_name)
-        
+        hidden_rows, hidden_cols = check_xls_hidden_rows_columns(Path(filepath))
+
+        row_str = (
+            ", ".join(f"{sheet}シートの{r+1}行" for sheet, r in hidden_rows)
+            if hidden_rows else "該当なし"
+        )
+        col_str = (
+            ", ".join(f"{sheet}シートの{get_excel_column_letter(c+1)}列" for sheet, c in hidden_cols)
+            if hidden_cols else "該当なし"
+        )
+
         if hidden_rows or hidden_cols:
-            row_str = hidden_rows if hidden_rows else "該当なし"
-            col_str = hidden_cols if hidden_cols else "該当なし"
             return False, f"非表示行／列があります（行: {row_str}, 列: {col_str}）"
         return True, "非表示行／列はありません"
-    
+
+    # .xlsx の場合
     ws = workbook[ctx.sheet_name]
     hidden_rows = [d.index for d in ws.row_dimensions.values() if d.hidden]
     hidden_cols = [d.index for d in ws.column_dimensions.values() if d.hidden]
 
+    row_str = (
+        ", ".join(f"{r}行" for r in hidden_rows) if hidden_rows else "該当なし"
+    )
+    col_str = (
+        ", ".join(f"{get_excel_column_letter(c)}列" for c in hidden_cols) if hidden_cols else "該当なし"
+    )
+
     if hidden_rows or hidden_cols:
-        row_str = hidden_rows if hidden_rows else "該当なし"
-        col_str = hidden_cols if hidden_cols else "該当なし"
         return False, f"非表示行／列があります（行: {row_str}, 列: {col_str}）"
     return True, "非表示行／列はありません"
 
@@ -142,7 +311,7 @@ def check_no_merged_cells(
 ) -> Tuple[bool, str]:
     # .xlsファイルの場合はxlrdを使用してチェック
     if workbook is None:
-        merged_ranges = check_xls_merged_cells(Path(filepath), ctx.sheet_name)
+        merged_ranges = check_xls_merged_cells(Path(filepath))
         
         if merged_ranges:
             return False, f"結合セルが検出されました: {merged_ranges}"
