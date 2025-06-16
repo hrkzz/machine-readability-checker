@@ -32,7 +32,29 @@ def check_codebook_exists(
     ctx: TableContext, workbook: Optional[Workbook], filepath: Optional[str]
 ) -> Tuple[bool, str]:
     if workbook is None:
-        return False, ".xlsファイルまたはCSVファイルのためコード表チェックをスキップ"
+        # .xlsファイルの場合、pandas ExcelFileを使用してシート情報を取得
+        if filepath and filepath.lower().endswith('.xls'):
+            try:
+                xl_file = pd.ExcelFile(filepath, engine='xlrd')
+                for sheet_name in xl_file.sheet_names:
+                    if sheet_name == ctx.sheet_name:
+                        continue
+                    
+                    # 簡易的なシート内容チェック
+                    try:
+                        df = pd.read_excel(filepath, sheet_name=sheet_name, header=None, nrows=10, engine='xlrd')
+                        if not df.empty:
+                            # シート名や内容からコード表らしさを判定
+                            if any(keyword in sheet_name.lower() for keyword in ['code', 'コード', 'master', 'マスタ']):
+                                return True, f"コード表とみられるシート: {sheet_name}"
+                    except:
+                        continue
+                        
+                return False, "コード表が見つかりません（.xlsファイルでは詳細検索は制限されます）"
+            except Exception as e:
+                return False, f".xlsファイルのシート検索でエラー: {e}"
+        else:
+            return False, ".xlsファイルまたはCSVファイルのためコード表チェックをスキップ"
 
     for sheet in workbook.worksheets:
         if sheet.title == ctx.sheet_name:
@@ -45,7 +67,29 @@ def check_question_master_exists(
     ctx: TableContext, workbook: Optional[Workbook], filepath: Optional[str]
 ) -> Tuple[bool, str]:
     if workbook is None:
-        return False, ".xlsファイルまたはCSVファイルのため設問マスターチェックをスキップ"
+        # .xlsファイルの場合、pandas ExcelFileを使用してシート情報を取得
+        if filepath and filepath.lower().endswith('.xls'):
+            try:
+                xl_file = pd.ExcelFile(filepath, engine='xlrd')
+                for sheet_name in xl_file.sheet_names:
+                    if sheet_name == ctx.sheet_name:
+                        continue
+                    
+                    # 簡易的なシート内容チェック
+                    try:
+                        df = pd.read_excel(filepath, sheet_name=sheet_name, header=None, nrows=10, engine='xlrd')
+                        if not df.empty:
+                            # シート名や内容から設問マスターらしさを判定
+                            if any(keyword in sheet_name.lower() for keyword in ['question', '設問', 'master', 'マスタ', 'variable', '変数']):
+                                return True, f"設問マスターとみられるシート: {sheet_name}"
+                    except:
+                        continue
+                        
+                return False, "設問マスター（変数定義表）が見つかりません（.xlsファイルでは詳細検索は制限されます）"
+            except Exception as e:
+                return False, f".xlsファイルのシート検索でエラー: {e}"
+        else:
+            return False, ".xlsファイルまたはCSVファイルのため設問マスターチェックをスキップ"
 
     for sheet in workbook.worksheets:
         if sheet.title == ctx.sheet_name:
@@ -58,7 +102,29 @@ def check_metadata_presence(
     ctx: TableContext, workbook: Optional[Workbook], filepath: Optional[str]
 ) -> Tuple[bool, str]:
     if workbook is None:
-        return False, ".xlsファイルまたはCSVファイルのためメタデータチェックをスキップ"
+        # .xlsファイルの場合、pandas ExcelFileを使用してシート情報を取得
+        if filepath and filepath.lower().endswith('.xls'):
+            try:
+                xl_file = pd.ExcelFile(filepath, engine='xlrd')
+                for sheet_name in xl_file.sheet_names:
+                    if sheet_name == ctx.sheet_name:
+                        continue
+                    
+                    # 簡易的なシート内容チェック
+                    try:
+                        df = pd.read_excel(filepath, sheet_name=sheet_name, header=None, nrows=10, engine='xlrd')
+                        if not df.empty:
+                            # シート名や内容からメタ情報らしさを判定
+                            if any(keyword in sheet_name.lower() for keyword in ['meta', 'メタ', 'info', '情報', '概要', 'readme']):
+                                return True, f"メタ情報とみられるシート: {sheet_name}"
+                    except:
+                        continue
+                        
+                return False, "調査概要やメタデータが確認できません（.xlsファイルでは詳細検索は制限されます）"
+            except Exception as e:
+                return False, f".xlsファイルのシート検索でエラー: {e}"
+        else:
+            return False, ".xlsファイルまたはCSVファイルのためメタデータチェックをスキップ"
 
     for sheet in workbook.worksheets:
         if sheet.title == ctx.sheet_name:

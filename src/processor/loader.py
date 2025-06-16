@@ -4,6 +4,14 @@ import pandas as pd
 import openpyxl
 from src.config import PREVIEW_ROW_COUNT
 
+# xlrdライブラリの読み込み（.xls対応のため）
+try:
+    import xlrd
+    XLRD_AVAILABLE = True
+except ImportError:
+    XLRD_AVAILABLE = False
+    print("Warning: xlrd library not available. .xls files may not work properly.")
+
 # 対応可能な拡張子（.xls も対応可能に）
 ALLOWED_EXTENSIONS = {".xlsx", ".xls", ".csv"}
 
@@ -55,7 +63,6 @@ def load_file(file_path: Path) -> Dict[str, Any]:
         print(f"=== .xls ファイル読み込み開始: {file_path} ===")
         try:
             # xlrdライブラリを直接使用してファイル情報を確認
-            import xlrd
             wb = xlrd.open_workbook(str(file_path))
             print(f"xlrdで開いたワークブック: {wb.nsheets} シート")
             

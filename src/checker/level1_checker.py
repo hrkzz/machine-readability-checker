@@ -9,6 +9,10 @@ from src.checker.utils import (
     detect_platform_characters,
     get_excel_column_letter,
     MAX_EXAMPLES,
+    check_xls_hidden_rows_columns,
+    check_xls_merged_cells,
+    check_xls_cell_formats,
+    detect_multiple_tables_dataframe,
 )
 from src.llm.llm_client import call_llm
 
@@ -30,7 +34,9 @@ def check_no_images_or_objects(
     if ext == ".csv":
         return True, "csvファイルのためオブジェクトチェック不要"
     elif ext == ".xls":
-        return True, "xlsファイルは図形・オブジェクトチェック対象外"
+        # .xlsファイルでは図形・オブジェクトの詳細検出は困難だが、
+        # 一般的に統計表では図形は使用されないため、警告として扱う
+        return True, "xlsファイルでは図形・オブジェクトの検出は困難ですが、一般的に統計表では使用されません"
     elif ext == ".xlsx":
         if has_any_drawing_xlsx(path):
             return False, "図形・テキストボックスが検出されました"
@@ -42,9 +48,25 @@ def check_no_images_or_objects(
 def check_one_table_per_sheet(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
-    # .xlsファイルの場合はワークブックがNoneになるため、スキップ
+    # .xlsファイルの場合はDataFrameベースでチェック
     if workbook is None:
-        return True, "xlsファイルのため複数テーブルチェックをスキップ"
+        column_rows = ctx.row_indices.get("column_rows", [])
+        data_start = ctx.row_indices.get("data_start", 0)
+        data_end = ctx.row_indices.get("data_end", len(ctx.data) - 1)
+        
+        if not column_rows or data_start is None or data_end is None:
+            return False, "テーブル構造情報が不足しているためチェックできません"
+        
+        # DataFrameの元データを使用（構造解析前のデータ）
+        # ctx.dataは既に構造解析後なので、loaderから取得した生データを使用したい
+        # とりあえず現在のデータで分析
+        is_multiple, block_count = detect_multiple_tables_dataframe(
+            ctx.data, column_rows, 0, len(ctx.data) - 1
+        )
+        
+        if is_multiple:
+            return False, f"複数テーブルの疑いがあります（検出ブロック数: {block_count}）"
+        return True, "1つのテーブルのみです"
     
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
@@ -78,9 +100,15 @@ def check_one_table_per_sheet(
 def check_no_hidden_rows_or_columns(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
-    # .xlsファイルの場合はワークブックがNoneになるため、スキップ
+    # .xlsファイルの場合はxlrdを使用してチェック
     if workbook is None:
-        return True, "xlsファイルのため非表示行・列チェックをスキップ"
+        hidden_rows, hidden_cols = check_xls_hidden_rows_columns(Path(filepath), ctx.sheet_name)
+        
+        if hidden_rows or hidden_cols:
+            row_str = hidden_rows if hidden_rows else "該当なし"
+            col_str = hidden_cols if hidden_cols else "該当なし"
+            return False, f"非表示行／列があります（行: {row_str}, 列: {col_str}）"
+        return True, "非表示行／列はありません"
     
     ws = workbook[ctx.sheet_name]
     hidden_rows = [d.index for d in ws.row_dimensions.values() if d.hidden]
@@ -112,9 +140,13 @@ def check_no_notes_outside_table(
 def check_no_merged_cells(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
-    # .xlsファイルの場合はワークブックがNoneになるため、スキップ
+    # .xlsファイルの場合はxlrdを使用してチェック
     if workbook is None:
-        return True, "xlsファイルのため結合セルチェックをスキップ"
+        merged_ranges = check_xls_merged_cells(Path(filepath), ctx.sheet_name)
+        
+        if merged_ranges:
+            return False, f"結合セルが検出されました: {merged_ranges}"
+        return True, "結合セルはありません"
     
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
@@ -140,9 +172,16 @@ def check_no_merged_cells(
 def check_no_format_based_semantics(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
-    # .xlsファイルの場合はワークブックがNoneになるため、スキップ
+    # .xlsファイルの場合はxlrdを使用してチェック
     if workbook is None:
-        return True, "xlsファイルのため書式チェックをスキップ"
+        data_start = ctx.row_indices.get("data_start", 0)
+        data_end = ctx.row_indices.get("data_end", len(ctx.data) - 1)
+        
+        flagged = check_xls_cell_formats(Path(filepath), ctx.sheet_name, data_start, data_end)
+        
+        if flagged:
+            return False, f"視覚的装飾による意味付けが検出されました（例: {flagged[:MAX_EXAMPLES]}）"
+        return True, "書式ベースの意味づけは検出されませんでした"
     
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
