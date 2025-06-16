@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Any, cast
+from typing import Dict, Any
 import pandas as pd
 import openpyxl
 from src.config import PREVIEW_ROW_COUNT
