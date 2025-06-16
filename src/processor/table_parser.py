@@ -3,7 +3,6 @@ import pandas as pd
 import json
 import re
 import textwrap
-import xlrd
 from loguru import logger
 
 from src.config import PREVIEW_ROW_COUNT
@@ -233,7 +232,7 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
 
     # データ範囲の妥当性チェック
     if data_start < 0 or data_end < 0 or data_start > data_end:
-        logger.warning(f"=== データ範囲エラー（修正前） ===")
+        logger.warning("=== データ範囲エラー（修正前） ===")
         logger.debug(f"data_start: {data_start}, data_end: {data_end}, df.shape: {df.shape}")
         
         # 自動修正を試行
@@ -274,7 +273,7 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
 
     # column_rowsの妥当性チェック
     if not column_rows or min(column_rows) < 0 or max(column_rows) >= len(df):
-        logger.warning(f"=== カラム行エラー ===")
+        logger.warning("=== カラム行エラー ===")
         logger.debug(f"column_rows: {column_rows}, df.shape: {df.shape}")
         
         # 自動修正
@@ -317,7 +316,7 @@ def extract_structured_table(info: Dict[str, Any]) -> TableContext:
     if data_start <= data_end and data_start < len(df) and data_end < len(df):
         data = df.iloc[data_start : data_end + 1].copy()
     else:
-        logger.warning(f"=== データ切り出しでデフォルト処理 ===")
+        logger.warning("=== データ切り出しでデフォルト処理 ===")
         logger.debug(f"data_start: {data_start}, data_end: {data_end}, df.shape: {df.shape}")
         # デフォルト: ヘッダー行以降すべてをデータとする
         if column_rows:

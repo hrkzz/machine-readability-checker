@@ -47,7 +47,7 @@ def check_codebook_exists(
                             # シート名や内容からコード表らしさを判定
                             if any(keyword in sheet_name.lower() for keyword in ['code', 'コード', 'master', 'マスタ']):
                                 return True, f"コード表とみられるシート: {sheet_name}"
-                    except:
+                    except Exception:
                         continue
                         
                 return False, "コード表が見つかりません（.xlsファイルでは詳細検索は制限されます）"
@@ -82,7 +82,7 @@ def check_question_master_exists(
                             # シート名や内容から設問マスターらしさを判定
                             if any(keyword in sheet_name.lower() for keyword in ['question', '設問', 'master', 'マスタ', 'variable', '変数']):
                                 return True, f"設問マスターとみられるシート: {sheet_name}"
-                    except:
+                    except Exception:
                         continue
                         
                 return False, "設問マスター（変数定義表）が見つかりません（.xlsファイルでは詳細検索は制限されます）"
@@ -117,7 +117,7 @@ def check_metadata_presence(
                             # シート名や内容からメタ情報らしさを判定
                             if any(keyword in sheet_name.lower() for keyword in ['meta', 'メタ', 'info', '情報', '概要', 'readme']):
                                 return True, f"メタ情報とみられるシート: {sheet_name}"
-                    except:
+                    except Exception:
                         continue
                         
                 return False, "調査概要やメタデータが確認できません（.xlsファイルでは詳細検索は制限されます）"
