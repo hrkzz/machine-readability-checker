@@ -169,7 +169,7 @@ def check_no_images_or_objects(
     elif ext == ".xls":
         # .xlsファイルでは図形・オブジェクトの詳細検出は困難だが、
         # 一般的に統計表では図形は使用されないため、警告として扱う
-        return False, "xlsファイルでは図形・オブジェクトの検出は困難ですが、一般的に統計表では使用されません"
+        return False, "xlsファイルでは図形や画像の自動判定ができません。必要に応じて目視でご確認ください"
     elif ext == ".xlsx":
         if has_any_drawing_xlsx(path):
             return False, "図形・テキストボックスが検出されました"
@@ -257,6 +257,7 @@ def check_xls_hidden_rows_columns(file_path: Path) -> tuple:
 def check_no_hidden_rows_or_columns(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
+    # .xls の場合
     if workbook is None:
         hidden_rows, hidden_cols = check_xls_hidden_rows_columns(Path(filepath))
 
