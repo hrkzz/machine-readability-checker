@@ -6,9 +6,9 @@ from loguru import logger
 from src.processor.context import TableContext
 
 
-class BaseChecker(ABC):
+class BaseLevel1Checker(ABC):
     """
-    チェッカーの基底クラス
+    Level1チェッカーの基底クラス
     各ファイル形式（CSV、XLS、XLSX）に共通するインターフェースを定義
     """
     

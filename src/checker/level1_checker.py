@@ -4,7 +4,7 @@ from typing import Tuple, cast
 from loguru import logger
 
 from src.processor.context import TableContext
-from .base.checker import BaseChecker
+from src.checker.base_checker import BaseLevel1Checker
 from .common import (
     get_excel_column_letter,
     MAX_EXAMPLES,
@@ -12,7 +12,7 @@ from .common import (
 from src.checker.handler.format_handler import FormatHandler
 
 
-class Level1Checker(BaseChecker):
+class Level1Checker(BaseLevel1Checker):
     """
     Level1チェッカー
     CSV、XLS、XLSXの全ファイル形式に対応
