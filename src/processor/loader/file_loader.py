@@ -37,11 +37,14 @@ class FileLoader(BaseLoader):
             try:
                 df = pd.read_csv(file_path, header=None, encoding="utf-8")
             except UnicodeDecodeError:
-                df = pd.read_csv(file_path, header=None, encoding="cp932")
+                try:
+                    df = pd.read_csv(file_path, header=None, encoding="cp932")
+                except UnicodeDecodeError:
+                    df = pd.read_csv(file_path, header=None, encoding="shift_jis")
             self.logger.info(f"CSV読み込み完了: shape={df.shape}")
         except UnicodeDecodeError as e:
             self.logger.error(f"CSVのエンコーディングエラー: {e}")
-            raise ValueError("CSVファイルのエンコーディングに問題があります。Shift_JIS（cp932）などを試してください。")
+            raise ValueError("CSVファイルのエンコーディングに問題があります。UTF-8, Shift_JIS, CP932 などを試してください。")
         
         sheet_info = self.create_sheet_info("CSV", df)
         return self.create_result_structure(file_path, ".csv", [sheet_info])
