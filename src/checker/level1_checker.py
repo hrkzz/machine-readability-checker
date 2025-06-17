@@ -4,24 +4,24 @@ from typing import Tuple, cast
 from loguru import logger
 
 from src.processor.context import TableContext
-from src.checker.base.base_checker import BaseChecker
-from src.checker.utils.common import (
+from .base.checker import BaseChecker
+from .common import (
     get_excel_column_letter,
     MAX_EXAMPLES,
 )
-from src.checker.utils.format_specific import FormatSpecificHandler
+from src.checker.handler.format_handler import FormatHandler
 
 
 class Level1Checker(BaseChecker):
     """
-    統合されたLevel1チェッカー
+    Level1チェッカー
     CSV、XLS、XLSXの全ファイル形式に対応
     """
     
     def __init__(self):
         super().__init__()
         self.logger.add("logs/level1_checker.log", rotation="10 MB", retention="30 days", level="DEBUG")
-        self.handler = FormatSpecificHandler()
+        self.handler = FormatHandler()
     
     def get_supported_file_types(self) -> set:
         return {".csv", ".xls", ".xlsx"}

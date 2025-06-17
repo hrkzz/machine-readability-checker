@@ -2,8 +2,8 @@ from typing import Tuple
 import pandas as pd
 
 from src.processor.context import TableContext
-from src.checker.base.base_checker import BaseLevel2Checker
-from src.checker.utils.common import (
+from .base.checker import BaseLevel2Checker
+from src.checker.common import (
     get_excel_column_letter,
     MAX_EXAMPLES,
     is_clean_numeric,
@@ -15,8 +15,8 @@ from src.llm.llm_client import call_llm
 
 class Level2Checker(BaseLevel2Checker):
     """
-    統合されたLevel2チェッカー
-    CSV、XLS、XLSXの全ファイル形式に対応（完全共通ロジック）
+    Level2チェッカー
+    CSV、XLS、XLSXの全ファイル形式に対応
     """
     
     def __init__(self):

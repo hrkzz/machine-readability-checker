@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Dict, Any
 
-from .unified_loader import UnifiedLoader
+from .file_loader import FileLoader
 
 
 class LoaderFactory:
@@ -11,7 +11,7 @@ class LoaderFactory:
     
     def __init__(self):
         self.loaders = [
-            UnifiedLoader(),
+            FileLoader(),
         ]
     
     def get_loader(self, file_path: Path):

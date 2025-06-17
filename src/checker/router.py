@@ -15,7 +15,7 @@ def run_checks_from_rules(
 ) -> list[dict[str, Any]]:
     """
     ルールファイルに従ってチェックを実行し、結果を返す
-    新しいファクトリーパターンを使用してファイル形式に応じたチェッカーを選択
+    ファクトリーパターンを使用してファイル形式に応じたチェッカーを選択
     """
     with open(rule_file, encoding="utf-8") as f:
         rules = json.load(f)

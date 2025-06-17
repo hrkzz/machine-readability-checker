@@ -2,6 +2,7 @@ import zipfile
 from pathlib import Path
 from openpyxl.worksheet.worksheet import Worksheet
 from ...llm.llm_client import call_llm
+from src.checker.common import get_excel_column_letter
 
 
 def has_any_drawing_xlsx(path: Path) -> bool:

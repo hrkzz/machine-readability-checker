@@ -2,21 +2,21 @@ from typing import Tuple
 import pandas as pd
 
 from src.processor.context import TableContext
-from src.checker.base.base_checker import BaseLevel3Checker
-from src.checker.utils.common import is_likely_long_format
-from src.checker.utils.format_specific import FormatSpecificHandler
+from .base.checker import BaseLevel3Checker
+from src.checker.common import is_likely_long_format
+from src.checker.handler.format_handler import FormatHandler
 
 
 class Level3Checker(BaseLevel3Checker):
     """
-    統合されたLevel3チェッカー
-    CSV、XLS、XLSXの全ファイル形式に対応（部分的共通ロジック）
+    Level3チェッカー
+    CSV、XLS、XLSXの全ファイル形式に対応
     """
     
     def __init__(self):
         super().__init__()
         self.logger.add("logs/level3_checker.log", rotation="10 MB", retention="30 days", level="DEBUG")
-        self.handler = FormatSpecificHandler()
+        self.handler = FormatHandler()
     
     def get_supported_file_types(self) -> set:
         return {".csv", ".xls", ".xlsx"}

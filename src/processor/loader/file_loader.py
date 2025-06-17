@@ -7,9 +7,9 @@ import openpyxl
 from .base import BaseLoader
 
 
-class UnifiedLoader(BaseLoader):
+class FileLoader(BaseLoader):
     """
-    統合されたファイルローダー
+    ファイルローダー
     CSV、XLS、XLSXの全ファイル形式に対応
     """
     

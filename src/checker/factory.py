@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from .level1_checker import Level1Checker
-from .level2_checker import Level2Checker
-from .level3_checker import Level3Checker
+from src.checker.level1_checker import Level1Checker
+from src.checker.level2_checker import Level2Checker
+from src.checker.level3_checker import Level3Checker
 
 
 class CheckerFactory:

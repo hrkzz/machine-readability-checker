@@ -1,7 +1,7 @@
 import xlrd
 from pathlib import Path
 from loguru import logger
-from .common import get_excel_column_letter
+from src.checker.common import get_excel_column_letter
 
 
 def get_xls_workbook_info(file_path: Path) -> dict:

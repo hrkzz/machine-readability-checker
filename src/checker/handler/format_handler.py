@@ -3,15 +3,15 @@ from typing import Tuple, Optional, cast
 import openpyxl
 import pandas as pd
 
-from .common import get_excel_column_letter, detect_platform_characters, MAX_EXAMPLES, is_sheet_likely
-from .csv_utils import detect_multiple_tables_csv
-from .xls_utils import check_xls_merged_cells, check_xls_cell_formats, check_xls_hidden_rows_columns
-from .xlsx_utils import has_any_drawing_xlsx, check_xlsx_format_semantics
+from src.checker.common import get_excel_column_letter, detect_platform_characters, MAX_EXAMPLES, is_sheet_likely
+from src.checker.handler.csv_handler import detect_multiple_tables_csv
+from src.checker.handler.xls_handler import check_xls_merged_cells, check_xls_cell_formats, check_xls_hidden_rows_columns
+from src.checker.handler.xlsx_handler import has_any_drawing_xlsx, check_xlsx_format_semantics
 from src.processor.context import TableContext
 from src.llm.llm_client import call_llm
 
 
-class FormatSpecificHandler:
+class FormatHandler:
     """
     ファイル形式固有の処理を統合するハンドラークラス
     """
