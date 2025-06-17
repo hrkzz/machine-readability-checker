@@ -1,16 +1,8 @@
 from pathlib import Path
 
-from .csv.level1_checker import CSVLevel1Checker
-from .csv.level2_checker import CSVLevel2Checker
-from .csv.level3_checker import CSVLevel3Checker
-
-from .xls.level1_checker import XLSLevel1Checker
-from .xls.level2_checker import XLSLevel2Checker
-from .xls.level3_checker import XLSLevel3Checker
-
-from .xlsx.level1_checker import XLSXLevel1Checker
-from .xlsx.level2_checker import XLSXLevel2Checker
-from .xlsx.level3_checker import XLSXLevel3Checker
+from .level1_checker import Level1Checker
+from .level2_checker import Level2Checker
+from .level3_checker import Level3Checker
 
 
 class CheckerFactory:
@@ -20,21 +12,15 @@ class CheckerFactory:
     
     def __init__(self):
         self.level1_checkers = [
-            CSVLevel1Checker(),
-            XLSLevel1Checker(),
-            XLSXLevel1Checker(),
+            Level1Checker(),
         ]
         
         self.level2_checkers = [
-            CSVLevel2Checker(),
-            XLSLevel2Checker(),
-            XLSXLevel2Checker(),
+            Level2Checker(),
         ]
         
         self.level3_checkers = [
-            CSVLevel3Checker(),
-            XLSLevel3Checker(),
-            XLSXLevel3Checker(),
+            Level3Checker(),
         ]
     
     def get_level1_checker(self, file_path: Path):

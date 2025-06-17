@@ -1,9 +1,7 @@
 from pathlib import Path
 from typing import Dict, Any
 
-from .csv_loader import CSVLoader
-from .xls_loader import XLSLoader
-from .xlsx_loader import XLSXLoader
+from .unified_loader import UnifiedLoader
 
 
 class LoaderFactory:
@@ -13,9 +11,7 @@ class LoaderFactory:
     
     def __init__(self):
         self.loaders = [
-            CSVLoader(),
-            XLSLoader(),
-            XLSXLoader(),
+            UnifiedLoader(),
         ]
     
     def get_loader(self, file_path: Path):
