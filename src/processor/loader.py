@@ -7,6 +7,24 @@ from loguru import logger
 
 from src.config import PREVIEW_ROW_COUNT
 
+def detect_encoding(file_path: Path) -> str:
+    """ファイルのエンコーディングを自動検出"""
+    try:
+        import chardet
+        with open(file_path, 'rb') as f:
+            raw_data = f.read()
+        result = chardet.detect(raw_data)
+        detected_encoding = result['encoding']
+        confidence = result['confidence']
+        logger.info(f"エンコーディング検出: {detected_encoding} (信頼度: {confidence})")
+        return detected_encoding if confidence > 0.7 else None
+    except ImportError:
+        logger.warning("chardetライブラリが利用できません")
+        return None
+    except Exception as e:
+        logger.error(f"エンコーディング検出でエラー: {e}")
+        return None
+
 
 def load_file(file_path: Path) -> Dict[str, Any]:
     """
@@ -28,18 +46,56 @@ def load_file(file_path: Path) -> Dict[str, Any]:
 
 def _load_csv(file_path: Path) -> Dict[str, Any]:
     """CSV形式の読み込み処理（エンコーディング対応）"""
-    try:
+    df = None
+    
+    # Streamlit Cloud環境での特別な処理
+    logger.info(f"CSV読み込み開始: {file_path}")
+    logger.info(f"ファイル存在確認: {file_path.exists()}")
+    if file_path.exists():
+        logger.info(f"ファイルサイズ: {file_path.stat().st_size} bytes")
+    
+    # 自動検出を最初に試行
+    detected_encoding = detect_encoding(file_path)
+    encodings = ["utf-8", "cp932", "shift_jis", "iso-2022-jp", "euc-jp", "latin1"]
+    
+    # 検出されたエンコーディングを最初に試行
+    if detected_encoding and detected_encoding not in encodings:
+        encodings.insert(0, detected_encoding)
+    elif detected_encoding and detected_encoding in encodings:
+        encodings.remove(detected_encoding)
+        encodings.insert(0, detected_encoding)
+    
+    # Streamlit Cloud環境での追加オプション
+    pandas_options = {
+        'header': None,
+        'on_bad_lines': 'skip',  # 問題のある行をスキップ
+        'engine': 'python',     # Pythonエンジンを使用（より寛容）
+    }
+    
+    for encoding in encodings:
         try:
-            df = pd.read_csv(file_path, header=None, encoding="utf-8")
-        except UnicodeDecodeError:
-            try:
-                df = pd.read_csv(file_path, header=None, encoding="cp932")
-            except UnicodeDecodeError:
-                df = pd.read_csv(file_path, header=None, encoding="shift_jis")
-        logger.info(f"CSV読み込み完了: shape={df.shape}")
-    except UnicodeDecodeError as e:
-        logger.error(f"CSVのエンコーディングエラー: {e}")
-        raise ValueError("CSVファイルのエンコーディングに問題があります。UTF-8, Shift_JIS, CP932のいずれでも読み込めませんでした。")
+            logger.info(f"エンコーディング {encoding} で読み込み試行中...")
+            df = pd.read_csv(file_path, encoding=encoding, **pandas_options)
+            logger.info(f"CSV読み込み完了（{encoding}）: shape={df.shape}")
+            break
+        except UnicodeDecodeError as e:
+            logger.debug(f"エンコーディング {encoding} で読み込み失敗: {e}")
+            continue
+        except Exception as e:
+            logger.error(f"CSV読み込みでエラー（{encoding}）: {e}")
+            continue
+    
+    if df is None:
+        logger.error("全てのエンコーディングで読み込みに失敗")
+        # 最後の手段：バイナリ読み込みでデバッグ情報を出力
+        try:
+            with open(file_path, 'rb') as f:
+                first_bytes = f.read(100)
+            logger.error(f"ファイルの最初の100バイト: {first_bytes}")
+        except Exception as debug_e:
+            logger.error(f"デバッグ情報取得失敗: {debug_e}")
+        
+        raise ValueError(f"CSVファイル {file_path} のエンコーディングを特定できませんでした。対応エンコーディング: {encodings}")
     
     sheet_info = {
         "sheet_name": "CSV",
