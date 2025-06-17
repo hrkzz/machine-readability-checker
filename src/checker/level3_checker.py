@@ -2,7 +2,7 @@ from typing import Tuple
 import pandas as pd
 
 from src.processor.context import TableContext
-from .base.checker import BaseLevel3Checker
+from src.checker.base_checker import BaseLevel3Checker
 from src.checker.common import is_likely_long_format
 from src.checker.handler.format_handler import FormatHandler
 

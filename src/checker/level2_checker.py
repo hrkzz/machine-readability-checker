@@ -2,7 +2,7 @@ from typing import Tuple
 import pandas as pd
 
 from src.processor.context import TableContext
-from .base.checker import BaseLevel2Checker
+from src.checker.base_checker import BaseLevel2Checker
 from src.checker.common import (
     get_excel_column_letter,
     MAX_EXAMPLES,
