@@ -1,7 +1,5 @@
 from pathlib import Path
 from typing import Tuple, Optional, cast
-import openpyxl
-import pandas as pd
 
 from src.checker.common import get_excel_column_letter, detect_platform_characters, MAX_EXAMPLES, is_sheet_likely
 from src.checker.handler.csv_handler import detect_multiple_tables_csv

@@ -1,7 +1,5 @@
 import re
-from pathlib import Path
 from typing import Tuple, cast
-from loguru import logger
 
 from src.processor.context import TableContext
 from src.checker.base_checker import BaseLevel1Checker

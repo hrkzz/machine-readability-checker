@@ -1,7 +1,6 @@
 import pandas as pd
 from pathlib import Path
 from loguru import logger
-from src.checker.common import get_excel_column_letter
 
 
 def detect_multiple_tables_csv(df: pd.DataFrame, sheet_name: str = "CSV") -> tuple:
