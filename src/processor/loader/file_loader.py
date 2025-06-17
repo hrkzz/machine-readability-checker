@@ -34,7 +34,10 @@ class FileLoader(BaseLoader):
     def _load_csv(self, file_path: Path) -> Dict[str, Any]:
         """CSV形式の読み込み処理"""
         try:
-            df = pd.read_csv(file_path, header=None, encoding="cp932")
+            try:
+                df = pd.read_csv(file_path, header=None, encoding="utf-8")
+            except UnicodeDecodeError:
+                df = pd.read_csv(file_path, header=None, encoding="cp932")
             self.logger.info(f"CSV読み込み完了: shape={df.shape}")
         except UnicodeDecodeError as e:
             self.logger.error(f"CSVのエンコーディングエラー: {e}")
