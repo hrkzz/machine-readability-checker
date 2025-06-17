@@ -50,7 +50,7 @@ if uploaded_file is not None:
     st.session_state["uploaded_file"] = uploaded_file
     st.session_state["uploaded_path"] = None
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=uploaded_file.name) as tmp_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=uploaded_file.name, mode='wb') as tmp_file:
         tmp_file.write(uploaded_file.getbuffer())
         st.session_state["uploaded_path"] = tmp_file.name
 
