@@ -88,21 +88,23 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
         - データを列方向に整理するための名前（例えば「品目番号」「項目名」「年月日」など）。
         - 表タイトルや注釈（例：「項目：総合季節調整指数」など）は含めないこと。
         - 必要に応じて、複数行にわたるマルチインデックスの可能性あり。
+        - 空セルを含む行でも、他のセルと組み合わせて列名を形成するなら含める。
         - セル結合や「単位」などが含まれることもある。
 
         2. annotation_rows（タイトル・出典・備考などの説明行）
         - 表の上部や下部に位置し、「表タイトル」「注記」「出典」などを含む行。
         - 多くの列で文字列のみで構成されている。
         - 表の構造に含めたくない場合、すべてこちらに分類する。
+        - 多くの列が文字列や空欄で構成されていることもある（ただし、column_rowsとの差異に注意）。
 
         3. data_start / data_end（データ行の範囲）
         - 実データが含まれており、多くのセルが数値型。
-        - column_rows の直後から始まり、連続する構造。
+        - column_rows の直後から開始するのが自然。
 
         注意点
         column_rows, data_start, data_end, annotation_rowsが重なることはありません。
         この表は Wide形式（列数が非常に多い）または統計表形式である可能性があります。
-        - 列名が複数行にまたがっている場合（例：男女別×指標別）、column_rows は 2〜4 行を含むことがあります。
+        - 列名が複数行にまたがっている場合（例：男女別×指標別）、column_rows は 2〜6 行を含むことがあります。
         - 表タイトルや補足文（例：「第2表 就業状態別15歳以上人口」など）は annotation_rows に分類し、column_rows に含めないでください。
         - LLMがトークン制限で一部の列しか見えない場合も、構造の一貫性から column_rows を類推して判断してください。
 
@@ -113,7 +115,7 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
     """)
 
     try:
-        raw_response = call_llm(prompt)
+        raw_response = call_llm(prompt, model="gpt-4o")
 
         # JSON部分だけ抽出（```json ... ``` 形式のガードを削除）
         match = re.search(r"{[\s\S]+}", raw_response)

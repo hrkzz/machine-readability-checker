@@ -59,7 +59,7 @@ if uploaded_file is not None:
         st.warning(
             f"{uploaded_file.name} がアップロードされました。"
             "下のボタンを押して構造解析を開始してください。"
-            "なお .xls ファイルでは一部の機能（オブジェクト判定など）が利用できない点注意ください。"
+            "なお .xls ファイルでは一部の機能（オブジェクト判定など）が利用できません。"
         )
     else:
         st.info(
@@ -79,12 +79,12 @@ if uploaded_file is not None and "structure_done" not in st.session_state:
             
             # ファイル形式に応じてワークブックを読み込み
             file_path = Path(st.session_state["uploaded_path"])
-            if file_path.suffix.lower() == ".xls":
-                # .xlsファイルの場合はワークブックをNoneとして扱う
-                wb = None
-            else:
+            if file_path.suffix.lower() == ".xlsx":
                 # .xlsxファイルの場合のみopenpyxlを使用
                 wb = load_workbook(st.session_state["uploaded_path"], data_only=True)
+            else:
+                # .xlsファイルや.csvファイルの場合はワークブックをNoneとして扱う
+                wb = None
 
             st.session_state["ctx"] = ctx
             st.session_state["workbook"] = wb
@@ -105,12 +105,12 @@ if ctx is not None:
         st.markdown("カラム構造")
         st.write(ctx.columns)
 
-        st.markdown("データ（先頭5行）")
+        st.markdown("データ（先頭10行）")
         try:
-            st.dataframe(ctx.data.head())
+            st.dataframe(ctx.data.head(10))
         except Exception:
             st.warning("⚠️ 表示中にエラーが発生したため、テキスト表示に切り替えます。")
-            st.code(ctx.data.head().to_string(), language="text")
+            st.code(ctx.data.head(10).to_string(), language="text")
 
         if not ctx.upper_annotations.empty:
             st.markdown("上部注釈")
