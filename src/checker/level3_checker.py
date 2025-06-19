@@ -1,10 +1,14 @@
 from typing import Tuple
 import pandas as pd
+import warnings
 
 from src.processor.context import TableContext
 from src.checker.base_checker import BaseLevel3Checker
 from src.checker.common import is_likely_long_format
 from src.checker.handler.format_handler import FormatHandler
+
+# PerformanceWarningを抑制
+warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
 
 
 class Level3Checker(BaseLevel3Checker):
@@ -25,6 +29,7 @@ class Level3Checker(BaseLevel3Checker):
         """選択肢のコード化チェック（全形式共通）"""
         df = ctx.data
         candidate_cols = []
+        processed_columns = 0
 
         for col in df.columns:
             try:
@@ -32,6 +37,7 @@ class Level3Checker(BaseLevel3Checker):
                 if isinstance(series, pd.DataFrame):
                     continue
 
+                processed_columns += 1
                 unique_vals = series.dropna().unique()
                 if len(unique_vals) < 10:
                     if any(not str(val).isdigit() for val in unique_vals):
@@ -57,6 +63,7 @@ class Level3Checker(BaseLevel3Checker):
     
     def check_long_format_if_many_columns(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """long format形式のチェック（全形式共通）"""
+        col_count = len(ctx.data.columns)
         if is_likely_long_format(ctx.data):
             return True, "縦型（long format）とみなされます"
         return False, "wide型であり、long型形式ではありません" 

@@ -26,11 +26,15 @@ class Level1Checker(BaseLevel1Checker):
     
     def check_valid_file_format(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """ファイル形式の妥当性チェック"""
-        return self.handler.check_file_format(filepath)
+        result = self.handler.check_file_format(filepath)
+        # ハンドラー内でログ出力されるため、ここでは追加ログなし
+        return result
     
     def check_no_images_or_objects(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """画像・オブジェクトの存在チェック"""
-        return self.handler.check_images_objects(filepath)
+        result = self.handler.check_images_objects(filepath)
+        # ハンドラー内でログ出力されるため、ここでは追加ログなし
+        return result
     
     def check_one_table_per_sheet(self, ctx: TableContext, workbook: object, filepath: str) -> Tuple[bool, str]:
         """1シート1テーブルのチェック"""

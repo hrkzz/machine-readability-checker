@@ -50,17 +50,23 @@ def check_xls_merged_cells(
                 bottom_right = f"{get_excel_column_letter(c1)}{r1}"
                 merged_cells.append(f"{top_left}:{bottom_right}")
 
+        # 結果サマリー
+        if merged_cells:
+            logger.warning(f"check_xls_merged_cells: 結合セル検出 - {sheet_name}: {merged_cells}")
+        else:
+            logger.info(f"check_xls_merged_cells: OK - {sheet_name}")
+
         return merged_cells
 
     except Exception as e:
-        logger.error(f"check_xls_merged_cells エラー ({sheet_name}): {e}")
+        logger.error(f"check_xls_merged_cells: 処理中にエラーが発生 ({sheet_name}): {e}")
         return []
 
 
 def check_xls_cell_formats(file_path: Path, sheet_name: str, data_start: int, data_end: int) -> list:
     """xlsファイルのセル書式をチェック（座標修正版）"""
     try:
-        logger.debug(f"check_xls_cell_formats: 開始 - {file_path}, sheet: {sheet_name}, data_start: {data_start}, data_end: {data_end}")
+        logger.debug(f"check_xls_cell_formats: 開始 - {file_path}, sheet: {sheet_name}")
         workbook = xlrd.open_workbook(str(file_path), formatting_info=True)
         sheet = workbook.sheet_by_name(sheet_name)
         flagged = []
@@ -109,11 +115,16 @@ def check_xls_cell_formats(file_path: Path, sheet_name: str, data_start: int, da
                 if bg_index not in (64, 0):  # 標準色以外
                     flagged.append(f"{coord}（背景色）")
 
-        logger.debug(f"書式チェック完了: {len(flagged)}件のフラグ")
+        # 結果サマリー
+        if flagged:
+            logger.warning(f"check_xls_cell_formats: 書式付きセル検出 - {sheet_name}: {len(flagged)}件")
+        else:
+            logger.info(f"check_xls_cell_formats: OK - {sheet_name}")
+
         return flagged
 
     except Exception as e:
-        logger.exception(f"書式チェックでエラー: {e}")
+        logger.error(f"check_xls_cell_formats: 処理中にエラーが発生 - {sheet_name}: {e}")
         return []
 
 
@@ -130,23 +141,35 @@ def check_xls_hidden_rows_columns(file_path: Path) -> tuple:
             sheet = workbook.sheet_by_name(sheet_name)
 
             # 行の高さが0 → 非表示
+            sheet_hidden_rows = []
             for row_idx in range(sheet.nrows):
                 rowinfo = sheet.rowinfo_map.get(row_idx)
-                if rowinfo:
-                    logger.debug(f"  row {row_idx}: height={rowinfo.height}")
                 if rowinfo and rowinfo.height == 0:
-                    logger.info(f"  非表示行検出: {sheet_name} 行{row_idx}")
+                    sheet_hidden_rows.append(row_idx)
                     hidden_rows.append((sheet_name, row_idx))
+            
+            if sheet_hidden_rows:
+                logger.info(f"非表示行検出: {sheet_name} 行{sheet_hidden_rows}")
 
             # 列の幅が0 → 非表示（colinfo_map は sheet 単位）
+            sheet_hidden_cols = []
             for col_idx, colinfo in sheet.colinfo_map.items():
-                logger.debug(f"  col {col_idx}: width={colinfo.width}")
                 if colinfo.width == 0:
-                    logger.info(f"  非表示列検出: {sheet_name} 列{col_idx}")
+                    col_letter = get_excel_column_letter(col_idx + 1)
+                    sheet_hidden_cols.append(col_letter)
                     hidden_cols.append((sheet_name, col_idx))
+            
+            if sheet_hidden_cols:
+                logger.info(f"非表示列検出: {sheet_name} 列{sheet_hidden_cols}")
+
+        # チェック結果サマリー
+        if hidden_rows or hidden_cols:
+            logger.warning(f"check_xls_hidden_rows_columns: 非表示要素検出 - 行:{len(hidden_rows)}件, 列:{len(hidden_cols)}件")
+        else:
+            logger.info("check_xls_hidden_rows_columns: OK")
 
         return hidden_rows, hidden_cols
 
     except Exception as e:
-        logger.exception(f"非表示行・列チェックでエラー: {e}")
+        logger.error(f"check_xls_hidden_rows_columns: 処理中にエラーが発生: {e}")
         return [], [] 

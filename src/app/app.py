@@ -54,7 +54,14 @@ if uploaded_file is not None:
         tmp_file.write(uploaded_file.getbuffer())
         st.session_state["uploaded_path"] = tmp_file.name
 
+    # ファイルアップロード完了ログ
+    file_size_mb = round(uploaded_file.size / (1024 * 1024), 2)
     ext = Path(uploaded_file.name).suffix.lower()
+    logger.info("========== アップロード完了 ==========")
+    logger.info(f"ファイル名: {uploaded_file.name}")
+    logger.info(f"ファイルサイズ: {file_size_mb} MB")
+    logger.info(f"ファイル形式: {ext}")
+
     if ext == ".xls":
         st.warning(
             f"{uploaded_file.name} がアップロードされました。"
@@ -72,6 +79,11 @@ if uploaded_file is not None:
 if uploaded_file is not None and "structure_done" not in st.session_state:
     if st.button("構造解析を実行"):
         with st.spinner("構造解析中..."):
+            # 構造解析開始ログ
+            file_name = Path(st.session_state["uploaded_path"]).name
+            logger.info("========== 構造解析開始 ==========")
+            logger.info(f"ファイル: {file_name}")
+            
             file_result = load_file(Path(st.session_state["uploaded_path"]))
             main_sheet = select_main_sheet(file_result["sheets"])
             struct_info = analyze_table_structure(main_sheet)
@@ -89,6 +101,12 @@ if uploaded_file is not None and "structure_done" not in st.session_state:
             st.session_state["ctx"] = ctx
             st.session_state["workbook"] = wb
             st.session_state["structure_done"] = True
+            
+            # 構造解析完了ログ
+            logger.info(f"メインシート選択: {ctx.sheet_name}")
+            logger.info(f"データ行数: {len(ctx.data)} 行")
+            logger.info(f"データ列数: {len(ctx.data.columns)} 列")
+            logger.info("========== 構造解析完了 ==========")
 
         st.success(f"メインシート「{ctx.sheet_name}」を選択し、構造を解析しました。")
 
@@ -128,9 +146,17 @@ if ctx is not None and "check_done" not in st.session_state:
         with st.spinner("チェック中..."):
             results = []
             progress = st.progress(0, text="LEVEL1 チェック中...")
+            
+            # 全体チェック開始ログ
+            file_name = Path(st.session_state["uploaded_path"]).name
+            logger.info(f"========== 機械可読性チェック開始 ==========")
+            logger.info(f"ファイル: {file_name}, シート: {ctx.sheet_name}")
 
             levels = ["level1", "level2", "level3"]
             progress_percentages = [0.0, 0.3, 0.6]
+            overall_success = 0
+            overall_warning = 0
+            overall_error = 0
 
             for i, level in enumerate(levels):
                 progress.progress(progress_percentages[i], text=f"{level.upper()} チェック中...")
@@ -144,12 +170,24 @@ if ctx is not None and "check_done" not in st.session_state:
                     level=level
                 )
                 results.append((level, level_results))
+                
+                # レベル別結果集計
+                level_success = sum(1 for r in level_results if r["result"] == "✓")
+                level_issues = sum(1 for r in level_results if r["result"] == "✗")
+                overall_success += level_success
+                overall_warning += level_issues  # 簡易的に警告として扱う
 
             progress.progress(0.9, text="チェック結果の整理と要約生成...")
 
             summary, summary_md, llm_comment = summarize_results(results)
 
             progress.progress(1.0, text="全てのチェックが完了しました")
+            
+            # 全体完了サマリーログ（ストーリー性を重視した順序）
+            total_checks = overall_success + overall_warning + overall_error
+            logger.info(f"ファイル: {file_name} - チェック処理完了")
+            logger.info(f"【全体結果】成功:{overall_success}, 問題:{overall_warning}, エラー:{overall_error} (全{total_checks}件)")
+            logger.info(f"========== 機械可読性チェック完了 ==========")
 
             st.session_state["results"] = results
             st.session_state["summary"] = summary

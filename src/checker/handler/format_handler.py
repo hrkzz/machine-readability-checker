@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Tuple, Optional, cast
+from loguru import logger
 
 from src.checker.common import get_excel_column_letter, detect_platform_characters, MAX_EXAMPLES, is_sheet_likely
 from src.checker.handler.csv_handler import detect_multiple_tables_csv
@@ -20,12 +21,16 @@ class FormatHandler:
         ext = Path(filepath).suffix.lower()
         
         if ext == ".csv":
+            logger.info("check_file_format: OK - CSV形式")
             return True, "CSVファイル形式です"
         elif ext == ".xls":
+            logger.info("check_file_format: OK - XLS形式（制限あり）")
             return True, "旧Excel（.xls）形式のため、一部の自動チェック（書式・図形など）が制限されます。必要に応じて目視での確認を行ってください"
         elif ext == ".xlsx":
+            logger.info("check_file_format: OK - XLSX形式")
             return True, "ファイル形式はExcel（.xlsx）です"
         else:
+            logger.error(f"check_file_format: サポート外形式 - {ext}")
             return False, f"サポート外のファイル形式です: {ext}"
     
     @staticmethod
@@ -34,14 +39,19 @@ class FormatHandler:
         ext = Path(filepath).suffix.lower()
         
         if ext == ".csv":
+            logger.info("check_images_objects: OK - CSV形式")
             return True, "CSVファイルのため、画像やオブジェクトに関する問題はありません"
         elif ext == ".xls":
+            logger.warning("check_images_objects: 制限あり - XLS形式では自動判定不可")
             return False, "xlsファイルでは図形や画像の自動判定ができません。必要に応じて目視でご確認ください"
         elif ext == ".xlsx":
             if has_any_drawing_xlsx(Path(filepath)):
+                logger.warning("check_images_objects: 図形・オブジェクト検出")
                 return False, "図形・テキストボックスが検出されました"
+            logger.info("check_images_objects: OK - XLSX形式")
             return True, "図形・テキストボックスは見つかりませんでした"
         else:
+            logger.error(f"check_images_objects: サポート外形式 - {ext}")
             return False, "サポート外のファイル形式です"
     
     @staticmethod
@@ -53,12 +63,15 @@ class FormatHandler:
             # CSV/XLSはDataFrameベースでチェック
             is_multiple, details = detect_multiple_tables_csv(ctx.data, ctx.sheet_name)
             if is_multiple:
+                logger.warning(f"check_multiple_tables: 複数テーブル疑い検出 - {ext.upper()}")
                 return False, f"複数テーブルの疑いがあります: {details}"
+            logger.info(f"check_multiple_tables: OK - {ext.upper()}")
             return True, "1つのテーブルのみです"
         
         elif ext == ".xlsx":
             # XLSXはワークブック直接チェック
             if workbook is None:
+                logger.error("check_multiple_tables: ワークブック情報不足")
                 return False, "ワークブック情報が不足しているためチェックできません"
             
             ws = workbook[ctx.sheet_name]
@@ -66,6 +79,7 @@ class FormatHandler:
             data_end = ctx.row_indices.get("data_end")
 
             if column_rows is None or data_end is None:
+                logger.error("check_multiple_tables: シート範囲情報不足")
                 return False, "シート範囲情報が不足しているためチェックできません"
 
             start = min(column_rows) if isinstance(column_rows, list) else cast(int, column_rows)
@@ -86,10 +100,13 @@ class FormatHandler:
                     in_block = False
 
             if blocks > 1:
+                logger.warning(f"check_multiple_tables: 複数ブロック検出 - {blocks}個")
                 return False, f"複数テーブルの疑いがあります（検出ブロック数: {blocks}）"
+            logger.info("check_multiple_tables: OK - XLSX")
             return True, "1つのテーブルのみです"
         
         else:
+            logger.error(f"check_multiple_tables: サポート外形式 - {ext}")
             return False, "サポート外のファイル形式です"
     
     @staticmethod
@@ -98,6 +115,7 @@ class FormatHandler:
         ext = Path(filepath).suffix.lower()
         
         if ext == ".csv":
+            logger.info("check_hidden_rows_columns: OK - CSV形式")
             return True, "CSVファイルのため、非表示行・列に関する問題はありません"
         
         elif ext == ".xls":
@@ -113,11 +131,14 @@ class FormatHandler:
             )
 
             if hidden_rows or hidden_cols:
+                logger.warning(f"check_hidden_rows_columns: 非表示要素検出 - 行:{len(hidden_rows)}, 列:{len(hidden_cols)}")
                 return False, f"非表示行／列があります（行: {row_str}, 列: {col_str}）"
+            logger.info("check_hidden_rows_columns: OK - XLS形式")
             return True, "非表示行／列はありません"
         
         elif ext == ".xlsx":
             if workbook is None:
+                logger.error("check_hidden_rows_columns: ワークブック情報不足")
                 return False, "ワークブック情報が不足しているためチェックできません"
             
             ws = workbook[ctx.sheet_name]
@@ -132,10 +153,13 @@ class FormatHandler:
             )
 
             if hidden_rows or hidden_cols:
+                logger.warning(f"check_hidden_rows_columns: 非表示要素検出 - 行:{len(hidden_rows)}, 列:{len(hidden_cols)}")
                 return False, f"非表示行／列があります（行: {row_str}, 列: {col_str}）"
+            logger.info("check_hidden_rows_columns: OK - XLSX形式")
             return True, "非表示行／列はありません"
         
         else:
+            logger.error(f"check_hidden_rows_columns: サポート外形式 - {ext}")
             return False, "サポート外のファイル形式です"
     
     @staticmethod
@@ -144,12 +168,14 @@ class FormatHandler:
         ext = Path(filepath).suffix.lower()
         
         if ext == ".csv":
+            logger.info("check_merged_cells: OK - CSV形式")
             return True, "CSVファイルのため、結合セルに関する問題はありません"
         
         elif ext == ".xls":
             column_rows = ctx.row_indices.get("column_rows")
             data_end = ctx.row_indices.get("data_end")
             if column_rows is None or data_end is None:
+                logger.error("check_merged_cells: 範囲情報不足 - XLS")
                 return False, "結合セルチェックに必要な情報が不足しています"
 
             start = min(column_rows) if isinstance(column_rows, list) else cast(int, column_rows)
@@ -157,12 +183,15 @@ class FormatHandler:
 
             merged = check_xls_merged_cells(Path(filepath), ctx.sheet_name, start, end)
             if merged:
+                # check_xls_merged_cells内でログ出力済み
                 return False, f"結合セルが検出されました: {merged}"
             else:
+                # check_xls_merged_cells内でログ出力済み
                 return True, "結合セルはありません"
         
         elif ext == ".xlsx":
             if workbook is None:
+                logger.error("check_merged_cells: ワークブック情報不足 - XLSX")
                 return False, "ワークブック情報が不足しているためチェックできません"
             
             ws = workbook[ctx.sheet_name]
@@ -170,6 +199,7 @@ class FormatHandler:
             data_end = ctx.row_indices.get("data_end")
 
             if column_rows is None or data_end is None:
+                logger.error("check_merged_cells: 範囲情報不足 - XLSX")
                 return False, "結合セルチェックに必要な情報が不足しています"
 
             start = min(column_rows) + 1 if isinstance(column_rows, list) else cast(int, column_rows) + 1
@@ -182,10 +212,13 @@ class FormatHandler:
             ]
 
             if relevant_merges:
+                logger.warning(f"check_merged_cells: 結合セル検出 - XLSX: {len(relevant_merges)}件")
                 return False, f"結合セルが検出されました: {relevant_merges}"
+            logger.info("check_merged_cells: OK - XLSX形式")
             return True, "結合セルはありません"
         
         else:
+            logger.error(f"check_merged_cells: サポート外形式 - {ext}")
             return False, "サポート外のファイル形式です"
     
     @staticmethod
@@ -194,6 +227,7 @@ class FormatHandler:
         ext = Path(filepath).suffix.lower()
         
         if ext == ".csv":
+            logger.info("check_format_semantics: OK - CSV形式")
             return True, "CSVファイルのため、書式による意味付けに関する問題はありません"
         
         elif ext == ".xls":
@@ -203,11 +237,14 @@ class FormatHandler:
             flagged = check_xls_cell_formats(Path(filepath), ctx.sheet_name, data_start, data_end)
             
             if flagged:
+                # check_xls_cell_formats内でログ出力済み
                 return False, f"視覚的装飾による意味付けが検出されました（例: {flagged[:MAX_EXAMPLES]}）"
+            # check_xls_cell_formats内でログ出力済み
             return True, "書式ベースの意味づけは検出されませんでした"
         
         elif ext == ".xlsx":
             if workbook is None:
+                logger.error("check_format_semantics: ワークブック情報不足 - XLSX")
                 return False, "ワークブック情報が不足しているためチェックできません"
             
             ws = workbook[ctx.sheet_name]
@@ -215,15 +252,19 @@ class FormatHandler:
             data_end = ctx.row_indices.get("data_end")
 
             if column_rows is None or data_end is None:
+                logger.error("check_format_semantics: 範囲情報不足 - XLSX")
                 return False, "書式チェックに必要な情報が不足しています"
 
             flagged = check_xlsx_format_semantics(ws, column_rows, data_end)
 
             if flagged:
+                # check_xlsx_format_semantics内でログ出力済み
                 return False, f"視覚的装飾による意味付けが検出されました（例: {flagged[:MAX_EXAMPLES]}）"
+            # check_xlsx_format_semantics内でログ出力済み
             return True, "書式ベースの意味づけは検出されませんでした"
         
         else:
+            logger.error(f"check_format_semantics: サポート外形式 - {ext}")
             return False, "サポート外のファイル形式です"
     
     @staticmethod
@@ -282,6 +323,7 @@ class FormatHandler:
                     break
 
         if not sample_cells:
+            logger.info(f"check_whitespace_formatting: OK - {format_label}")
             return True, "体裁調整目的の空白は見つかりませんでした"
 
         prompt = f"""
@@ -296,10 +338,16 @@ class FormatHandler:
             - 調整目的なし
         """
 
-        result = call_llm(prompt)
-        if "調整目的あり" in result:
-            return False, f"体裁調整目的の空白が含まれている可能性があります（例: {sample_cells[:MAX_EXAMPLES]}）"
-        return True, "体裁調整目的の空白は見つかりませんでした"
+        try:
+            result = call_llm(prompt)
+            if "調整目的あり" in result:
+                logger.warning(f"check_whitespace_formatting: 体裁調整空白検出 - {format_label}: {len(sample_cells)}件")
+                return False, f"体裁調整目的の空白が含まれている可能性があります（例: {sample_cells[:MAX_EXAMPLES]}）"
+            logger.info(f"check_whitespace_formatting: OK - {format_label}")
+            return True, "体裁調整目的の空白は見つかりませんでした"
+        except Exception as e:
+            logger.error(f"check_whitespace_formatting: LLM エラー - {format_label}: {e}")
+            return False, f"空白チェックでLLMエラーが発生しました: {e}"
     
     @staticmethod
     def check_platform_dependent_characters(ctx: TableContext, workbook: Optional[object], filepath: str) -> Tuple[bool, str]:
@@ -343,7 +391,9 @@ class FormatHandler:
             return False, "サポート外のファイル形式です"
 
         if issues:
+            logger.warning(f"check_platform_dependent_characters: 機種依存文字検出 - {ext.upper()}: {len(issues)}件")
             return False, f"機種依存文字が含まれています（例: {issues[:MAX_EXAMPLES]}）"
+        logger.info(f"check_platform_dependent_characters: OK - {ext.upper()}")
         return True, "機種依存文字は含まれていません"
     
     # Level3専用の形式固有処理

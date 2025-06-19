@@ -54,8 +54,9 @@ def analyze_table_structure(sheet: Dict[str, Any]) -> Dict[str, Any]:
             }
         }
     
-    top = sheet["preview_top"].fillna("").astype(str).values.tolist()
-    bot = sheet["preview_bottom"].fillna("").astype(str).values.tolist()
+    # FutureWarning回避: infer_objects(copy=False)を追加
+    top = sheet["preview_top"].fillna("").infer_objects(copy=False).astype(str).values.tolist()
+    bot = sheet["preview_bottom"].fillna("").infer_objects(copy=False).astype(str).values.tolist()
     content = "\n".join(",".join(row) for row in (top + [["..."]] + bot))
 
     prompt = textwrap.dedent(f"""\
