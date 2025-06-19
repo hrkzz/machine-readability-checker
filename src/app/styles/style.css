@@ -1,13 +1,17 @@
+/* フォント */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Sans+Mono:wght@400;700&display=swap');
+
 /* 全体のフォントと背景 */
 body {
     background-color: #f5f7fa;
-    font-family: 'Segoe UI', sans-serif;
+    font-family: 'Noto Sans JP', 'Segoe UI', sans-serif;
     color: #2c3e50;
 }
 
 /* タイトル */
 h1 {
-    color: #1f77b4;
+    font-size: 28px;
+    color: #2c3e50;
     font-weight: bold;
     border-bottom: 2px solid #ddd;
     padding-bottom: 10px;
@@ -68,4 +72,8 @@ input,
     border: 1px solid #ccc;
     border-radius: 6px;
     padding: 8px;
+}
+
+.block-container {
+    padding-top: 1rem; 
 }
