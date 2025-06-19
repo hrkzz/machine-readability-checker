@@ -61,6 +61,8 @@ def check_xlsx_format_semantics(worksheet, column_rows, data_end):
     """
     XLSX用の書式チェック
     """
+    from loguru import logger
+    
     flagged = []
     start = min(column_rows) + 1 if isinstance(column_rows, list) else column_rows + 1
     end = data_end + 1
@@ -91,5 +93,11 @@ def check_xlsx_format_semantics(worksheet, column_rows, data_end):
                     flagged.append(f"{coord}（下線）")
                 if font.sz and (font.sz < 9 or font.sz > 13):
                     flagged.append(f"{coord}（フォントサイズ {font.sz}）")
+
+    # 結果サマリー
+    if flagged:
+        logger.warning(f"check_xlsx_format_semantics: 書式付きセル検出 - {worksheet.title}: {len(flagged)}件")
+    else:
+        logger.info(f"check_xlsx_format_semantics: OK - {worksheet.title}")
 
     return flagged 
