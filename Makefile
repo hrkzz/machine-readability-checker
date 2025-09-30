@@ -5,7 +5,7 @@ install:
 	python -m pip install -r requirements.txt
 
 run:
-	PYTHONPATH=. streamlit run src/app/app.py
+	PYTHONPATH=. streamlit run src/app/app.py --server.headless true
 
 lint:
 	ruff check .

@@ -1,21 +1,140 @@
 from pathlib import Path
 import re
-from typing import Tuple, cast
+from typing import Tuple, cast, Any
 from openpyxl.workbook.workbook import Workbook
 import pandas as pd
 import xlrd
+import zipfile
 from loguru import logger
 
 from src.processor.context import TableContext
-from src.checker.utils import (
-    has_any_drawing_xlsx,
-    detect_platform_characters,
-    get_excel_column_letter,
-    MAX_EXAMPLES,
-)
-from src.llm.llm_client import call_llm
 
 logger.add("logs/checker1.log", rotation="10 MB", retention="30 days", level="DEBUG")
+
+
+MAX_EXAMPLES = 10
+
+
+def get_excel_column_letter(n: int) -> str:
+    result = ""
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        result = chr(65 + r) + result
+    return result
+
+
+def get_xls_workbook_info(file_path: Path) -> dict:
+    """xlsファイルの基本情報を取得"""
+    try:
+        workbook = xlrd.open_workbook(str(file_path))
+
+        sheet_info = []
+        for sheet_name in workbook.sheet_names():
+            sheet = workbook.sheet_by_name(sheet_name)
+            sheet_info.append({
+                'name': sheet_name,
+                'nrows': sheet.nrows,
+                'ncols': sheet.ncols
+            })
+
+        return {
+            'file_path': str(file_path),
+            'nsheets': workbook.nsheets,
+            'sheet_names': workbook.sheet_names(),
+            'sheet_info': sheet_info
+        }
+    except Exception as e:
+        logger.error(f"xlsファイルの詳細情報取得でエラー: {e}")
+        return {}
+
+
+def has_any_drawing(path: Path) -> bool:
+    """
+    Excel ファイルに図形やオブジェクトが含まれているかをチェック
+    .xls ファイルは構造上チェックが困難なため常に False を返す
+    """
+    ext = path.suffix.lower()
+    if ext == ".xls":
+        # .xls ファイルは構造上図形チェックが困難なため、
+        # 図形があるものとして扱う（必要に応じて後で対応）
+        return True
+    elif ext != ".xlsx":
+        return False
+
+    try:
+        with zipfile.ZipFile(path, 'r') as z:
+            for name in z.namelist():
+                if name.startswith('xl/drawings/') and name.endswith('.xml'):
+                    xml = z.read(name)
+                    if b'<xdr:twoCellAnchor' in xml or b'<xdr:oneCellAnchor' in xml:
+                        return True
+    except Exception:
+        return False
+    return False
+
+
+def detect_platform_characters(text: str) -> bool:
+    pattern = re.compile(r"[①-⑳⓪-⓿Ⅰ-Ⅻ㊤㊥㊦㊧㊨㈱㈲㈹℡〒〓※]")
+    return bool(pattern.search(text))
+
+
+def is_clean_numeric(val: Any) -> bool:
+    if isinstance(val, (int, float)):
+        return True
+    if isinstance(val, str):
+        s = val.strip()
+        if re.search(r"[^\d.\-]", s):
+            return False
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+    return False
+
+
+FREE_TEXT_PATTERN = re.compile(r"""
+    ^\s*(?:  
+        (?:その他|そのほか)\s*[:：\-\–\/]           |
+        (?:その他|そのほか)\s*[\(（].+?[\)）]       |
+        コメント\s*[:：]                            |
+        自由記述\s*[:：]                            |
+        詳細\s*[:：]                                |
+        備考\s*[:：]                                |
+        補足\s*[:：]                                |
+        感想\s*[:：]                                |
+        意見\s*[:：]                                |
+        メモ\s*[:：]                                |
+        特記事項\s*[:：]                            |
+        注釈\s*[:：]                                |
+        自己PR\s*[:：]                              |
+        フリーテキスト\s*[:：]                      |
+        フリー回答\s*[:：]
+    )
+""", re.VERBOSE)
+
+
+MISSING_VALUE_EXPRESSIONS = [
+    "不明", "不詳", "無記入", "無回答", "該当なし", "なし", "無し", "n/a", "na", "nan",
+    "未定", "未記入", "未入力", "未回答", "記載なし", "対象外", "空欄", "空白", "不在",
+    "特になし", "---", "--", "-", "ー", "―", "？", "?", "わからない", "わかりません",
+    "なし（特記なし）", "無し（詳細不明）", "無効", "省略", "null", "none"
+]
+
+
+def is_likely_long_format(df: pd.DataFrame) -> bool:
+    """
+    ID・変数名・値 を含み、列数が多い DataFrame を縦型とみなす。
+    """
+    if len(df.columns) < 10:
+        return False
+    return {"ID", "変数名", "値"}.issubset(set(df.columns))
+
+
+# 後方互換性のために元の関数名も維持
+def has_any_drawing_xlsx(path: Path) -> bool:
+    """後方互換性のための関数（has_any_drawingを使用することを推奨）"""
+    return has_any_drawing(path)
 
 
 def check_xls_merged_cells(
@@ -266,22 +385,28 @@ def check_xls_hidden_rows_columns(file_path: Path) -> tuple:
 def check_no_hidden_rows_or_columns(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
-    # .xls の場合
+    # ブックが無い場合（.xls または .csv など）
     if workbook is None:
-        hidden_rows, hidden_cols = check_xls_hidden_rows_columns(Path(filepath))
+        ext = Path(filepath).suffix.lower()
+        if ext == ".xls":
+            hidden_rows, hidden_cols = check_xls_hidden_rows_columns(Path(filepath))
 
-        row_str = (
-            ", ".join(f"{sheet}シートの{r+1}行" for sheet, r in hidden_rows)
-            if hidden_rows else "該当なし"
-        )
-        col_str = (
-            ", ".join(f"{sheet}シートの{get_excel_column_letter(c+1)}列" for sheet, c in hidden_cols)
-            if hidden_cols else "該当なし"
-        )
+            row_str = (
+                ", ".join(f"{sheet}シートの{r+1}行" for sheet, r in hidden_rows)
+                if hidden_rows else "該当なし"
+            )
+            col_str = (
+                ", ".join(f"{sheet}シートの{get_excel_column_letter(c+1)}列" for sheet, c in hidden_cols)
+                if hidden_cols else "該当なし"
+            )
 
-        if hidden_rows or hidden_cols:
-            return False, f"非表示行／列があります（行: {row_str}, 列: {col_str}）"
-        return True, "非表示行／列はありません"
+            if hidden_rows or hidden_cols:
+                return False, f"非表示行／列があります（行: {row_str}, 列: {col_str}）"
+            return True, "非表示行／列はありません"
+        elif ext == ".csv":
+            return True, "csvファイルのため非表示行・列の概念はありません"
+        else:
+            return True, "サポート外形式のため非表示行・列チェックをスキップします"
 
     # .xlsx の場合
     ws = workbook[ctx.sheet_name]
@@ -321,20 +446,26 @@ def check_no_merged_cells(
 ) -> Tuple[bool, str]:
     # .xls は workbook=None になるためこちら
     if workbook is None:
-        # テーブル本体の開始・終了行を ctx から取得
-        column_rows = ctx.row_indices.get("column_rows")
-        data_end    = ctx.row_indices.get("data_end")
-        if column_rows is None or data_end is None:
-            return False, "結合セルチェックに必要な情報が不足しています"
+        ext = Path(filepath).suffix.lower()
+        if ext == ".xls":
+            # テーブル本体の開始・終了行を ctx から取得
+            column_rows = ctx.row_indices.get("column_rows")
+            data_end    = ctx.row_indices.get("data_end")
+            if column_rows is None or data_end is None:
+                return False, "結合セルチェックに必要な情報が不足しています"
 
-        start = min(column_rows) if isinstance(column_rows, list) else cast(int, column_rows)
-        end   = cast(int, data_end)
+            start = min(column_rows) if isinstance(column_rows, list) else cast(int, column_rows)
+            end   = cast(int, data_end)
 
-        merged = check_xls_merged_cells(Path(filepath), ctx.sheet_name, start, end)
-        if merged:
-            return False, f"結合セルが検出されました: {merged}"
+            merged = check_xls_merged_cells(Path(filepath), ctx.sheet_name, start, end)
+            if merged:
+                return False, f"結合セルが検出されました: {merged}"
+            else:
+                return True, "結合セルはありません"
+        elif ext == ".csv":
+            return True, "csvファイルのため結合セルは存在しません"
         else:
-            return True, "結合セルはありません"
+            return True, "サポート外形式のため結合セルチェックをスキップします"
 
     
     ws = workbook[ctx.sheet_name]
@@ -363,14 +494,20 @@ def check_no_format_based_semantics(
 ) -> Tuple[bool, str]:
     # .xlsファイルの場合はxlrdを使用してチェック
     if workbook is None:
-        data_start = ctx.row_indices.get("data_start", 0)
-        data_end = ctx.row_indices.get("data_end", len(ctx.data) - 1)
-        
-        flagged = check_xls_cell_formats(Path(filepath), ctx.sheet_name, data_start, data_end)
-        
-        if flagged:
-            return False, f"視覚的装飾による意味付けが検出されました（例: {flagged[:MAX_EXAMPLES]}）"
-        return True, "書式ベースの意味づけは検出されませんでした"
+        ext = Path(filepath).suffix.lower()
+        if ext == ".xls":
+            data_start = ctx.row_indices.get("data_start", 0)
+            data_end = ctx.row_indices.get("data_end", len(ctx.data) - 1)
+
+            flagged = check_xls_cell_formats(Path(filepath), ctx.sheet_name, data_start, data_end)
+
+            if flagged:
+                return False, f"視覚的装飾による意味付けが検出されました（例: {flagged[:MAX_EXAMPLES]}）"
+            return True, "書式ベースの意味づけは検出されませんでした"
+        elif ext == ".csv":
+            return True, "csvファイルのため書式装飾チェックは対象外です"
+        else:
+            return True, "サポート外形式のため書式装飾チェックをスキップします"
     
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
@@ -436,22 +573,8 @@ def check_no_whitespace_formatting(
         if not sample_cells:
             return True, "体裁調整目的の空白は見つかりませんでした"
 
-        prompt = f"""
-            以下はExcelのセル値の一部です。これらの中に、見た目を整える目的（位置揃え・スペース調整など）で
-            **空白（特に全角スペース）が使われているものがあるか**を判定してください。
-
-            データ:
-            {chr(10).join(sample_cells)}
-
-            判断結果を次のいずれか一語で返してください：
-            - 調整目的あり
-            - 調整目的なし
-        """
-
-        result = call_llm(prompt)
-        if "調整目的あり" in result:
-            return False, f"体裁調整目的の空白が含まれている可能性があります（例: {sample_cells[:MAX_EXAMPLES]}）"
-        return True, "体裁調整目的の空白は見つかりませんでした"
+        # LLMに頼らず、全角スペースが見つかった時点で不合格とする
+        return False, f"体裁調整目的の空白が含まれている可能性があります（例: {sample_cells[:MAX_EXAMPLES]}）"
     
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
@@ -478,22 +601,9 @@ def check_no_whitespace_formatting(
     if not sample_cells:
         return True, "体裁調整目的の空白は見つかりませんでした"
 
-    prompt = f"""
-        以下はExcelのセル値の一部です。これらの中に、見た目を整える目的（位置揃え・スペース調整など）で
-        **空白（特に全角スペース）が使われているものがあるか**を判定してください。
+    # LLMに頼らず、全角スペースが見つかった時点で不合格とする
+    return False, f"体裁調整目的の空白が含まれている可能性があります（例: {sample_cells[:MAX_EXAMPLES]}）"
 
-        データ:
-        {chr(10).join(sample_cells)}
-
-        判断結果を次のいずれか一語で返してください：
-        - 調整目的あり
-        - 調整目的なし
-    """
-
-    result = call_llm(prompt)
-    if "調整目的あり" in result:
-        return False, f"体裁調整目的の空白が含まれている可能性があります（例: {sample_cells[:MAX_EXAMPLES]}）"
-    return True, "体裁調整目的の空白は見つかりませんでした"
 
 
 def check_single_data_per_cell(
@@ -561,3 +671,218 @@ def check_no_platform_dependent_characters(
     if issues:
         return False, f"機種依存文字が含まれています（例: {issues[:MAX_EXAMPLES]}）"
     return True, "機種依存文字は含まれていません"
+
+def check_numeric_columns_only(
+    ctx: TableContext,
+    workbook: Workbook,
+    filepath: str
+) -> Tuple[bool, str]:
+    df = ctx.data
+    problem_cells: dict = {}
+
+    for col_idx, col in enumerate(df.columns, start=1):
+        series_raw = df[col]
+        # 重複カラムで DataFrame になる場合はフラット化
+        if isinstance(series_raw, pd.DataFrame):
+            series = series_raw.stack(dropna=True).reset_index(drop=True)
+        else:
+            series = series_raw.dropna()
+        if series.empty:
+            continue
+
+        total = len(series)
+        ok_count = series.apply(is_clean_numeric).sum()
+        if ok_count / total < 0.8:
+            # 数値列とはみなさない
+            continue
+
+        if ok_count / total < 0.99:
+            for row_idx, val in zip(series.index, series):
+                if not is_clean_numeric(val):
+                    coord = f"{get_excel_column_letter(col_idx)}{row_idx + 1}"
+                    problem_cells.setdefault(col, []).append(f"{coord}: '{val}'")
+
+    if problem_cells:
+        msgs = [
+            f"{col}: {cells[:MAX_EXAMPLES]}" for col, cells in problem_cells.items()
+        ]
+        return False, "数値列に数値以外が含まれています:\n" + "\n".join(msgs)
+
+    return True, "数値列に不正なデータは含まれていません"
+
+
+def check_separate_other_detail_columns(
+    ctx: TableContext,
+    workbook: Workbook,
+    filepath: str
+) -> Tuple[bool, str]:
+    df = ctx.data
+    flagged = []
+
+    for col_idx, col in enumerate(df.columns, start=1):
+        col_series = df[col]
+        if isinstance(col_series, pd.DataFrame):
+            series = col_series.stack(dropna=True).reset_index(drop=True).astype(str)
+        else:
+            if not pd.api.types.is_string_dtype(col_series):
+                continue
+            series = col_series.dropna().astype(str)
+        if series.empty:
+            continue
+
+        if series.str.contains(FREE_TEXT_PATTERN).any():
+            flagged.append(f"{col}（列: {get_excel_column_letter(col_idx)}）")
+
+    if flagged:
+        return False, f"選択肢列に自由記述が混在している可能性があります: {flagged}"
+    return True, "選択肢列と自由記述は適切に分離されています"
+
+
+def check_no_missing_column_headers(
+    ctx: TableContext,
+    workbook: Workbook,
+    filepath: str
+) -> Tuple[bool, str]:
+    df = ctx.data
+    suspect = [c for c in df.columns if "Unnamed" in str(c) or str(c).strip() == ""]
+
+    def is_unclear(name: str) -> bool:
+        s = name.strip()
+        if s == "":
+            return True
+        # 1文字だけ、または記号/数字のみは不明瞭とみなす
+        if len(s) <= 1:
+            return True
+        if re.fullmatch(r"\d+", s):
+            return True
+        if re.fullmatch(r"[\W_]+", s):
+            return True
+        # 例: A, B1, X2 など短い略号を不明瞭とみなす
+        if re.fullmatch(r"[A-Za-z](\d)?", s):
+            return True
+        return False
+
+    for col in df.columns:
+        if col in suspect:
+            continue
+        if is_unclear(str(col)):
+            suspect.append(col)
+
+    if suspect:
+        return False, f"省略・不明な列名が検出されました: {suspect}"
+    return True, "全ての列に意味のあるヘッダーが付いています"
+
+
+def check_handling_of_missing_values(
+    ctx: TableContext,
+    workbook: Workbook,
+    filepath: str
+) -> Tuple[bool, str]:
+    df = ctx.data
+    flagged = []
+
+    normalized_missing = {str(x).strip().lower() for x in MISSING_VALUE_EXPRESSIONS}
+
+    for idx, col in enumerate(df.columns, start=1):
+        col_series = df[col]
+        if isinstance(col_series, pd.DataFrame):
+            flat_series = col_series.stack(dropna=True)
+        else:
+            flat_series = col_series.dropna()
+
+        unique_vals = [str(v).strip() for v in pd.unique(flat_series) if str(v).strip()]
+        if not unique_vals:
+            continue
+
+        lower_vals = {v.lower() for v in unique_vals}
+        present_missing = sorted(list(lower_vals & normalized_missing))
+        if present_missing:
+            flagged.append(f"{col}（列: {get_excel_column_letter(idx)}、欠損表現: {present_missing[:MAX_EXAMPLES]}）")
+
+    if flagged:
+        return False, f"欠損表現が含まれる列が見つかりました: {flagged}"
+    return True, "欠損表現は検出されませんでした"
+
+
+def check_csv_single_line_per_data(
+    ctx: TableContext, workbook: Workbook, filepath: str
+) -> Tuple[bool, str]:
+    ext = Path(filepath).suffix.lower()
+    if ext != ".csv":
+        return True, "CSVファイルではないためチェック対象外"
+
+    df = ctx.data.copy()
+    str_cols = df.select_dtypes(include=['object', 'string']).columns
+
+    problem_cells = []
+    for col in str_cols:
+        col_series = df[col]
+        if isinstance(col_series, pd.DataFrame):
+            series = col_series.stack(dropna=True).astype(str)
+        else:
+            series = col_series.astype(str)
+        new_line_problems = series[series.str.contains(r'[\n\r]', na=False)]
+
+        if not new_line_problems.empty:
+            for row_idx_raw, val in new_line_problems.items():
+                col_idx = df.columns.get_loc(col)
+                coord = f"列{get_excel_column_letter(col_idx + 1)} 行{row_idx_raw + 1}"
+                display_val = str(val).replace("\n", "↵").replace("\r", "↵")
+                problem_cells.append(f"{coord}: '{display_val[:20]}...'")
+                if len(problem_cells) >= MAX_EXAMPLES:
+                    break
+        if len(problem_cells) >= MAX_EXAMPLES:
+            break
+
+    if problem_cells:
+        return False, f"データ内部に改行が含まれています（例: {problem_cells}）"
+    return True, "データ内部に改行は含まれていません"
+
+
+def check_csv_fields_quoted(
+    ctx: TableContext, workbook: Workbook, filepath: str
+) -> Tuple[bool, str]:
+    ext = Path(filepath).suffix.lower()
+    if ext != ".csv":
+        return True, "CSVファイルではないためチェック対象外"
+
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception:
+        try:
+            with open(filepath, 'r', encoding='shift_jis') as f:
+                content = f.read()
+        except Exception as e:
+            return False, f"ファイル読み込みエラー: {e}"
+
+    has_unquoted_comma = False
+
+    for line in content.splitlines()[:MAX_EXAMPLES]:
+        fields = line.split(',')
+        if any(',' in field and not (field.strip().startswith('"') and field.strip().endswith('"')) for field in fields):
+            has_unquoted_comma = True
+            break
+
+    if has_unquoted_comma:
+        return False, "カンマを含むフィールドがダブルクォーテーションで囲まれていない可能性があります。データが正しく列分割されないリスクがあります。"
+
+    return True, "フィールドは適切に囲まれているか、またはカンマを含まないことが推測されます"
+
+
+CHECK_FUNCTIONS = {
+    "check_valid_file_format": check_valid_file_format,
+    "check_no_images_or_objects": check_no_images_or_objects,
+    "check_one_table_per_sheet": check_one_table_per_sheet,
+    "check_no_hidden_rows_or_columns": check_no_hidden_rows_or_columns,
+    "check_no_notes_outside_table": check_no_notes_outside_table,
+    "check_no_merged_cells": check_no_merged_cells,
+    "check_no_format_based_semantics": check_no_format_based_semantics,
+    "check_no_whitespace_formatting": check_no_whitespace_formatting,
+    "check_single_data_per_cell": check_single_data_per_cell,
+    "check_no_platform_dependent_characters": check_no_platform_dependent_characters,
+    "check_no_missing_column_headers": check_no_missing_column_headers,
+    "check_handling_of_missing_values": check_handling_of_missing_values,
+    "check_csv_single_line_per_data": check_csv_single_line_per_data,
+    "check_csv_fields_quoted": check_csv_fields_quoted,
+}

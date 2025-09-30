@@ -1,5 +1,3 @@
-from src.llm.llm_client import call_llm
-
 def summarize_results(results_per_level):
     summary = {}
     lines_for_prompt = []
@@ -16,18 +14,12 @@ def summarize_results(results_per_level):
 
         table_lines.append(f"| {level.upper()} | {passed} | {total} | {rate} |")
 
-        lines_for_prompt.append(f"【{level.upper()}】")
         for item in checks:
             status = "OK" if item["result"] == "✓" else "NG"
             lines_for_prompt.append(f"{item['id']} ({item['description']}): {status}")
 
-    prompt = (
-        "以下は機械可読性診断の評価結果です。\n"
-        "2〜3文の要約から構成されるリード文と、それぞれのレベルにおける主な問題点と、改善手順を簡潔に日本語でまとめてください。\n"
-        + "\n".join(lines_for_prompt)
-    )
-
-    llm_comment = call_llm(prompt)
+    # LLM呼び出し部分を削除し、固定のコメントを返す
+    llm_comment = "診断結果の要約と総評はスキップしました。（LLM機能が無効化されています）"
 
     summary_md = "### チェック結果サマリー\n\n" + "\n".join(table_lines)
     return summary, summary_md, llm_comment

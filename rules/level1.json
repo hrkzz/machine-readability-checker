@@ -1,52 +1,77 @@
 [
   {
     "id": "L1-01",
-    "description": "ファイル形式はExcelかCSV",
+    "description": "【共通】ファイル形式はExcel（.xlsx, .xls）かCSVとなっているか",
     "function": "check_valid_file_format"
   },
   {
     "id": "L1-02",
-    "description": "オブジェクトや画像を使わない",
-    "function": "check_no_images_or_objects"
+    "description": "【共通】1シート（ファイル）に複数の表が掲載されていないか",
+    "function": "check_one_table_per_sheet"
   },
   {
     "id": "L1-03",
-    "description": "1シートに1つの表を入れる",
+    "description": "【共通】データが分断されていないか（不必要な空白行/列がないか）",
     "function": "check_one_table_per_sheet"
   },
   {
     "id": "L1-04",
-    "description": "行や列を非表示にしない",
-    "function": "check_no_hidden_rows_or_columns"
-  },
-  {
-    "id": "L1-05",
-    "description": "表の外側にメモや備考を記載しない",
+    "description": "【共通】データ本体と無関係な情報がないか（表外のメモ等）",
     "function": "check_no_notes_outside_table"
   },
   {
+    "id": "L1-05",
+    "description": "【共通】すべての列に意味が推測できる項目名が存在するか",
+    "function": "check_no_missing_column_headers"
+  },
+  {
     "id": "L1-06",
-    "description": "セルを結合しない",
-    "function": "check_no_merged_cells"
-  },
-  {
-    "id": "L1-07",
-    "description": "書式でデータの違いを表現しない（網掛けなど）",
-    "function": "check_no_format_based_semantics"
-  },
-  {
-    "id": "L1-08",
-    "description": "スペースや改行で体裁を整えない",
+    "description": "【共通】スペースや改行等で体裁を整えていないか",
     "function": "check_no_whitespace_formatting"
   },
   {
-    "id": "L1-09",
-    "description": "1セルに1データしか入れない",
+    "id": "L1-07",
+    "description": "【共通】1セル1データとなっているか",
     "function": "check_single_data_per_cell"
   },
   {
-    "id": "L1-10",
-    "description": "機種依存文字を使わない",
+    "id": "L1-08",
+    "description": "【共通】機種依存文字を使用していないか",
     "function": "check_no_platform_dependent_characters"
+  },
+  {
+    "id": "L1-09",
+    "description": "【共通】空白（欠損値）とゼロ（0）が明確に区別されているか",
+    "function": "check_handling_of_missing_values"
+  },
+  {
+    "id": "L1-10",
+    "description": "【Excel】オブジェクト（画像、図形、テキストボックス）を使用していないか",
+    "function": "check_no_images_or_objects"
+  },
+  {
+    "id": "L1-11",
+    "description": "【Excel】書式（色、太字、網掛け等）でデータの違いを表現していないか",
+    "function": "check_no_format_based_semantics"
+  },
+  {
+    "id": "L1-12",
+    "description": "【Excel】セルの結合をしていないか",
+    "function": "check_no_merged_cells"
+  },
+  {
+    "id": "L1-13",
+    "description": "【Excel】不要な行や列が非表示のまま残されていないか",
+    "function": "check_no_hidden_rows_or_columns"
+  },
+  {
+    "id": "L1-14",
+    "description": "【CSV】1行1データで表現されているか",
+    "function": "check_csv_single_line_per_data"
+  },
+  {
+    "id": "L1-15",
+    "description": "【CSV】各フィールドの値をダブルコーテーション（“）で囲んでいるか",
+    "function": "check_csv_fields_quoted"
   }
 ]

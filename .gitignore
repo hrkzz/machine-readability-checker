@@ -17,6 +17,7 @@ test.py
 venv/
 env/
 ENV/
+.venv
 
 # IDE
 .vscode/
