@@ -18,7 +18,6 @@ Excel/CSVファイルの機械可読性を診断するためのWebアプリケ�
 
 - Python 3.8以上
 - 必要なパッケージ（requirements.txtに記載）
-- OpenAI APIキー（.streamlit/secrets.tomlファイルで設定）
 
 ## インストール方法
 
@@ -33,11 +32,7 @@ cd machine_readability_checker
 pip install -r requirements.txt
 ```
 
-3. 環境変数の設定
-環境変数の設定 .streamlit/secrets.toml ファイルを作成し、以下を記述
-```
-OPENAI_API_KEY=your_api_key_here
-```
+
 
 ## 使用方法
 
@@ -74,8 +69,6 @@ machine_readability_checker/
 │   │   ├── level3_checker.py  # レベル3チェックの実装
 │   │   ├── router.py          # チェック処理のルーティング管理
 │   │   └── utils.py           # 共通ユーティリティ関数
-│   ├── llm/                   # LLM（大規模言語モデル）関連
-│   │   └── llm_client.py      # LLMへのクライアントアクセスや処理
 │   ├── processor/             # データ処理・パース用モジュール
 │   │   ├── context.py         # 文脈情報の処理
 │   │   ├── loader.py          # データ読み込み処理

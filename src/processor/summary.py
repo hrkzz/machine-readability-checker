@@ -18,8 +18,9 @@ def summarize_results(results_per_level):
             status = "OK" if item["result"] == "✓" else "NG"
             lines_for_prompt.append(f"{item['id']} ({item['description']}): {status}")
 
-    # LLM呼び出し部分を削除し、固定のコメントを返す
-    llm_comment = "診断結果の要約と総評はスキップしました。（LLM機能が無効化されています）"
+    overall_comment = (
+        "診断は完了しました。詳細は各チェック項目の結果を確認してください。"
+    )
 
     summary_md = "### チェック結果サマリー\n\n" + "\n".join(table_lines)
-    return summary, summary_md, llm_comment
+    return summary, summary_md, overall_comment
