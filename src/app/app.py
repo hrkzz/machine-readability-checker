@@ -76,7 +76,8 @@ if uploaded_file is not None:
 
     # --- 2. 構造定義の入力 UI ---
     st.markdown("### 📊 データ構造定義")
-    col1, col2, col3 = st.columns(3)
+    # カラムを5つに増やす
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     # シート名選択
     with col1:
@@ -113,6 +114,24 @@ if uploaded_file is not None:
         # 終了行の値をセッションに保存（次回再描画時用）
         st.session_state["header_end_row_default"] = header_end_row
 
+    # データ開始行
+    with col4:
+        data_start_row = st.number_input(
+            "データ本体の**開始行** (0=自動)",
+            min_value=0,
+            value=0,
+            key="data_start_row",
+        )
+
+    # データ終了行
+    with col5:
+        data_end_row = st.number_input(
+            "データ本体の**終了行** (0=自動)",
+            min_value=0,
+            value=0,
+            key="data_end_row",
+        )
+
     # --- 3. 構造解析とチェック実行ボタン ---
     if st.button("構造解析とチェックを実行", key="run_analysis_check"):
         st.session_state["structure_done"] = False
@@ -129,6 +148,8 @@ if uploaded_file is not None:
                     sheet_name=selected_sheet,
                     header_start_row=header_start_row,
                     header_end_row=header_end_row,
+                    data_start_row=data_start_row,
+                    data_end_row=data_end_row,
                 )
 
                 # ファイル形式に応じてワークブックを読み込み (エラー修正後のロジック)

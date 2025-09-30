@@ -20,6 +20,8 @@ def extract_structured_table(
     info: Dict[str, Any],
     header_start_row: int = 1,  # 1-based: ヘッダー開始行
     header_end_row: int = 1,  # 1-based: ヘッダー終了行
+    data_start_row: int = 0,  # 0=自動
+    data_end_row: int = 0,  # 0=自動
 ) -> TableContext:
     """
     ユーザー定義の構造（ヘッダー範囲）に基づいてTableContextを構築する。
@@ -32,9 +34,9 @@ def extract_structured_table(
     header_start_idx = header_start_row - 1
     header_end_idx = header_end_row - 1
 
-    # データ開始行のインデックス (0-based)
-    data_start = header_end_idx + 1
-    data_end = total_rows - 1  # 最終行
+    # データ開始/終了行のインデックス (0-based)
+    data_start = data_start_row - 1 if data_start_row > 0 else header_end_idx + 1
+    data_end = data_end_row - 1 if data_end_row > 0 else total_rows - 1
 
     # 2. 基本的な妥当性チェック
     if (
@@ -76,9 +78,10 @@ def extract_structured_table(
     # 4. 注釈行の抽出
     # 上部注釈（ヘッダー行より上）
     upper = (
-        df.iloc[:header_start_idx].copy() if header_start_idx > 0 else pd.DataFrame()
+        df.iloc[:header_start_idx].copy().dropna(how='all') if header_start_idx > 0 else pd.DataFrame()
     )
-    lower = pd.DataFrame()
+    # データ終了行の後ろにデータがあれば、それを下部注釈とする
+    lower = df.iloc[data_end + 1 :].copy().dropna(how='all') if data_end < total_rows - 1 else pd.DataFrame()
 
     # 5. カラム名（ヘッダー）の構築
     col_df = df.iloc[column_rows].fillna("").astype(str)
@@ -145,6 +148,8 @@ def load_file_and_extract_context(
     sheet_name: str,  # 新規引数: シート名
     header_start_row: int = 1,  # 1-based: ヘッダー開始行
     header_end_row: int = 1,  # 1-based: ヘッダー終了行
+    data_start_row: int = 0,  # 0=自動
+    data_end_row: int = 0,  # 0=自動
 ) -> TableContext:
     """
     ファイルを読み込み、指定されたシートを選択し、ユーザー定義の設定でTableContextを抽出する。
@@ -215,7 +220,11 @@ def load_file_and_extract_context(
     # 3. 構造解析とデータ抽出 (ユーザー定義の引数を渡す)
     try:
         ctx = extract_structured_table(
-            main_sheet, header_start_row=header_start_row, header_end_row=header_end_row
+            main_sheet,
+            header_start_row=header_start_row,
+            header_end_row=header_end_row,
+            data_start_row=data_start_row,
+            data_end_row=data_end_row,
         )
         return ctx
     except Exception as e:

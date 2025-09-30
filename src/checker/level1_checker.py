@@ -12,7 +12,26 @@ from src.processor.context import TableContext
 logger.add("logs/checker1.log", rotation="10 MB", retention="30 days", level="DEBUG")
 
 
-MAX_EXAMPLES = 10
+def _col_to_num(col_str: str) -> int:
+    """Excelの列文字（A, B, AAなど）を数値に変換する"""
+    num = 0
+    for char in col_str:
+        num = num * 26 + (ord(char.upper()) - ord("A")) + 1
+    return num
+
+
+def get_sort_key(cell_str: str) -> Tuple[int, int]:
+    """セル番地文字列からソートキー（行番号, 列番号）を返す"""
+    # 代表的な形式: "A1", "A1:...", "A1（...", "列A 行12: ..."
+    m = re.search(r"([A-Z]+)(\d+)", cell_str)
+    if m:
+        col, row = m.groups()
+        return (int(row), _col_to_num(col))
+    m2 = re.search(r"列\s*([A-Z]+)\s*行\s*(\d+)", cell_str)
+    if m2:
+        col, row = m2.groups()
+        return (int(row), _col_to_num(col))
+    return (99999, 99999)
 
 
 def get_excel_column_letter(n: int) -> str:
@@ -118,6 +137,7 @@ FREE_TEXT_PATTERN = re.compile(
 MISSING_VALUE_EXPRESSIONS = [
     "不明",
     "不詳",
+    "…",
     "無記入",
     "無回答",
     "該当なし",
@@ -239,7 +259,9 @@ def check_xls_cell_formats(
         return []
 
 
-def detect_multiple_tables_dataframe(df: pd.DataFrame, sheet_name: str = "") -> tuple:
+def detect_multiple_tables_dataframe(
+    df: pd.DataFrame, sheet_name: str = "", data_start_offset: int = 0
+) -> tuple:
     """
     DataFrameベースで複数テーブルを検出する
 
@@ -294,7 +316,9 @@ def detect_multiple_tables_dataframe(df: pd.DataFrame, sheet_name: str = "") -> 
                     if val.replace(".", "").replace("-", "").isdigit()
                 )
                 if numeric_count / len(non_na_values) < 0.5:
-                    header_like_rows.append(idx)
+                    # 元ファイルの実行番号（0-based index + offset + 1）に変換
+                    actual_row_number = idx + data_start_offset + 1
+                    header_like_rows.append(actual_row_number)
 
         # 複数のヘッダー様行が離れて存在する場合
         if len(header_like_rows) >= 2:
@@ -356,9 +380,10 @@ def check_one_table_per_sheet(
 ) -> Tuple[bool, str]:
     # .xlsファイルの場合はDataFrameベースでチェック
     if workbook is None:
-        # 元のDataFrameを使用して複数テーブル検出
+        # 元のDataFrameを使用して複数テーブル検出（行番号はデータ開始行のオフセットを考慮）
+        data_start = ctx.row_indices.get("data_start", 0)
         is_multiple, details = detect_multiple_tables_dataframe(
-            ctx.data, ctx.sheet_name
+            ctx.data, ctx.sheet_name, data_start_offset=data_start
         )
 
         if is_multiple:
@@ -482,21 +507,28 @@ def check_no_hidden_rows_or_columns(
 def check_no_notes_outside_table(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
-    if not ctx.upper_annotations.empty or not ctx.lower_annotations.empty:
-        column_rows = ctx.row_indices.get("column_rows")
-        data_end = ctx.row_indices.get("data_end")
+    problem_notes: list[str] = []
 
-        if column_rows is None or data_end is None:
-            return False, "注釈行のチェックに必要な情報が不足しています"
+    # 上部注釈
+    if not ctx.upper_annotations.empty:
+        for row_idx, row in ctx.upper_annotations.iterrows():
+            actual_row = row_idx + 1
+            content = [str(v) for v in row.dropna().values]
+            if content:
+                problem_notes.append(f"**{actual_row}行目:** {', '.join(content)}")
 
-        top = (
-            column_rows[0] if isinstance(column_rows, list) else cast(int, column_rows)
-        )
-        bottom = cast(int, data_end) + 2
-        return (
-            False,
-            f"注釈行が検出されました（{top}行目より前、または{bottom}行目以降）",
-        )
+    # 下部注釈
+    if not ctx.lower_annotations.empty:
+        for row_idx, row in ctx.lower_annotations.iterrows():
+            actual_row = row_idx + 1
+            content = [str(v) for v in row.dropna().values]
+            if content:
+                problem_notes.append(f"**{actual_row}行目:** {', '.join(content)}")
+
+    if problem_notes:
+        details = "\n- ".join(problem_notes)
+        return False, f"テーブルの範囲外で以下の内容が検出されました:\n- {details}"
+
     return True, "表外の注釈や備考はありません"
 
 
@@ -551,6 +583,7 @@ def check_no_merged_cells(
     ]
 
     if relevant_merges:
+        relevant_merges.sort(key=get_sort_key)
         return False, f"結合セルが検出されました: {relevant_merges}"
     return True, "結合セルはありません"
 
@@ -558,6 +591,15 @@ def check_no_merged_cells(
 def check_no_format_based_semantics(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
+    # 先頭でファイル拡張子を確認し、.xls は早期に警告付き合格とする
+    path = Path(filepath)
+    ext = path.suffix.lower()
+
+    if ext == ".xls":
+        return (
+            True,
+            "旧Excel（.xls）形式のため、書式（文字色や太字など）の自動判定が不正確な場合があります。必要に応じて目視でご確認ください。",
+        )
     # .xlsファイルの場合はxlrdを使用してチェック
     if workbook is None:
         ext = Path(filepath).suffix.lower()
@@ -570,10 +612,9 @@ def check_no_format_based_semantics(
             )
 
             if flagged:
-                return (
-                    False,
-                    f"視覚的装飾による意味付けが検出されました（例: {flagged[:MAX_EXAMPLES]}）",
-                )
+                flagged.sort(key=get_sort_key)
+                details = "\n- ".join(flagged)
+                return False, f"以下のセルで視覚的装飾による意味付けが検出されました:\n- {details}"
             return True, "書式ベースの意味づけは検出されませんでした"
         elif ext == ".csv":
             return True, "csvファイルのため書式装飾チェックは対象外です"
@@ -627,10 +668,9 @@ def check_no_format_based_semantics(
                     flagged.append(f"{coord}（フォントサイズ {font.sz}）")
 
     if flagged:
-        return (
-            False,
-            f"視覚的装飾による意味付けが検出されました（例: {flagged[:MAX_EXAMPLES]}）",
-        )
+        flagged.sort(key=get_sort_key)
+        details = "\n- ".join(flagged)
+        return False, f"以下のセルで視覚的装飾による意味付けが検出されました:\n- {details}"
     return True, "書式ベースの意味づけは検出されませんでした"
 
 
@@ -656,10 +696,9 @@ def check_no_whitespace_formatting(
             return True, "体裁調整目的の空白は見つかりませんでした"
 
         # 全角スペースが見つかった時点で不合格とする
-        return (
-            False,
-            f"体裁調整目的の空白が含まれている可能性があります（例: {sample_cells[:MAX_EXAMPLES]}）",
-        )
+        sample_cells.sort(key=get_sort_key)
+        details = "\n- ".join(sample_cells)
+        return False, f"以下のセルで体裁調整目的の空白が使用されている可能性があります:\n- {details}"
 
     ws = workbook[ctx.sheet_name]
     column_rows = ctx.row_indices.get("column_rows")
@@ -693,10 +732,9 @@ def check_no_whitespace_formatting(
         return True, "体裁調整目的の空白は見つかりませんでした"
 
     # 全角スペースが見つかった時点で不合格とする
-    return (
-        False,
-        f"体裁調整目的の空白が含まれている可能性があります（例: {sample_cells[:MAX_EXAMPLES]}）",
-    )
+    sample_cells.sort(key=get_sort_key)
+    details = "\n- ".join(sample_cells)
+    return False, f"以下のセルで体裁調整目的の空白が使用されている可能性があります:\n- {details}"
 
 
 def check_single_data_per_cell(
@@ -720,7 +758,9 @@ def check_single_data_per_cell(
                 problems.append(f"{coord}: {repr(val)}")
 
     if problems:
-        return False, f"複数データセルが検出されました（例: {problems[:MAX_EXAMPLES]}）"
+        problems.sort(key=get_sort_key)
+        details = "\n- ".join(problems)
+        return False, f"以下のセルで複数のデータが検出されました:\n- {details}"
     return True, "各セルに1データのみです"
 
 
@@ -738,7 +778,9 @@ def check_no_platform_dependent_characters(
                     issues.append(f"{coord}: '{val}'")
 
         if issues:
-            return False, f"機種依存文字が含まれています（例: {issues[:MAX_EXAMPLES]}）"
+            issues.sort(key=get_sort_key)
+            details = "\n- ".join(issues)
+            return False, f"以下のセルで機種依存文字が含まれています:\n- {details}"
         return True, "機種依存文字は含まれていません"
 
     ws = workbook[ctx.sheet_name]
@@ -764,7 +806,9 @@ def check_no_platform_dependent_characters(
                 issues.append(f"{coord}: '{val}'")
 
     if issues:
-        return False, f"機種依存文字が含まれています（例: {issues[:MAX_EXAMPLES]}）"
+        issues.sort(key=get_sort_key)
+        details = "\n- ".join(issues)
+        return False, f"以下のセルで機種依存文字が含まれています:\n- {details}"
     return True, "機種依存文字は含まれていません"
 
 
@@ -774,8 +818,8 @@ def check_numeric_columns_only(
     df = ctx.data
     problem_cells: dict = {}
 
-    for col_idx, col in enumerate(df.columns, start=1):
-        series_raw = df[col]
+    for col_idx, col_name in enumerate(df.columns):
+        series_raw = df.iloc[:, col_idx]
         # 重複カラムで DataFrame になる場合はフラット化
         if isinstance(series_raw, pd.DataFrame):
             series = series_raw.stack(dropna=True).reset_index(drop=True)
@@ -793,12 +837,14 @@ def check_numeric_columns_only(
         if ok_count / total < 0.99:
             for row_idx, val in zip(series.index, series):
                 if not is_clean_numeric(val):
-                    coord = f"{get_excel_column_letter(col_idx)}{row_idx + 1}"
-                    problem_cells.setdefault(col, []).append(f"{coord}: '{val}'")
+                    coord = f"{get_excel_column_letter(col_idx + 1)}{row_idx + 1}"
+                    problem_cells.setdefault(col_name, []).append(f"{coord}: '{val}'")
 
     if problem_cells:
+        for cells in problem_cells.values():
+            cells.sort(key=get_sort_key)
         msgs = [
-            f"{col}: {cells[:MAX_EXAMPLES]}" for col, cells in problem_cells.items()
+            f"{name}:\n  - " + "\n  - ".join(cells) for name, cells in problem_cells.items()
         ]
         return False, "数値列に数値以外が含まれています:\n" + "\n".join(msgs)
 
@@ -867,30 +913,39 @@ def check_handling_of_missing_values(
     ctx: TableContext, workbook: Workbook, filepath: str
 ) -> Tuple[bool, str]:
     df = ctx.data
-    flagged = []
+    # 問題を値ごとにグループ化するための辞書
+    problems_by_value: dict[str, list[str]] = {}
 
+    data_start_offset = ctx.row_indices.get("data_start", 0)
     normalized_missing = {str(x).strip().lower() for x in MISSING_VALUE_EXPRESSIONS}
 
-    for idx, col in enumerate(df.columns, start=1):
-        col_series = df[col]
-        if isinstance(col_series, pd.DataFrame):
-            flat_series = col_series.stack(dropna=True)
-        else:
-            flat_series = col_series.dropna()
+    for col_idx, col_name in enumerate(df.columns):
+        col_series = df.iloc[:, col_idx]
 
-        unique_vals = [str(v).strip() for v in pd.unique(flat_series) if str(v).strip()]
-        if not unique_vals:
-            continue
+        for row_idx, val in col_series.items():
+            if isinstance(val, str):
+                cleaned_val = val.strip()
+                if cleaned_val.lower() in normalized_missing:
+                    excel_row = row_idx + data_start_offset + 1
+                    excel_col = get_excel_column_letter(col_idx + 1)
+                    cell_coord = f"{excel_col}{excel_row}"
 
-        lower_vals = {v.lower() for v in unique_vals}
-        present_missing = sorted(list(lower_vals & normalized_missing))
-        if present_missing:
-            flagged.append(
-                f"{col}（列: {get_excel_column_letter(idx)}、欠損表現: {present_missing[:MAX_EXAMPLES]}）"
+                    if cleaned_val not in problems_by_value:
+                        problems_by_value[cleaned_val] = []
+                    problems_by_value[cleaned_val].append(cell_coord)
+
+    if problems_by_value:
+        # グループ化された結果から、整形されたメッセージを生成
+        message_parts = ["以下のセルで欠損値を示す表現が見つかりました:"]
+        for value, cells in sorted(problems_by_value.items()):
+            cell_list_str = ", ".join(cells)
+            message_parts.append(
+                f"  - **値『{value}』** が見つかったセル ({len(cells)}件): {cell_list_str}"
             )
 
-    if flagged:
-        return False, f"欠損表現が含まれる列が見つかりました: {flagged}"
+        details = "\n".join(message_parts)
+        return False, details
+
     return True, "欠損表現は検出されませんでした"
 
 
@@ -902,30 +957,32 @@ def check_csv_single_line_per_data(
         return True, "CSVファイルではないためチェック対象外"
 
     df = ctx.data.copy()
-    str_cols = df.select_dtypes(include=["object", "string"]).columns
 
     problem_cells = []
-    for col in str_cols:
-        col_series = df[col]
+    for col_idx, col_name in enumerate(df.columns):
+        col_series = df.iloc[:, col_idx]
+
+        # 文字列型以外はスキップ
+        if not pd.api.types.is_string_dtype(col_series) and not pd.api.types.is_object_dtype(col_series):
+            continue
+
         if isinstance(col_series, pd.DataFrame):
-            series = col_series.stack(dropna=True).astype(str)
+            series = col_series.stack(dropna=True, future_stack=True).astype(str)
         else:
-            series = col_series.astype(str)
+            series = col_series.dropna().astype(str)
         new_line_problems = series[series.str.contains(r"[\n\r]", na=False)]
 
         if not new_line_problems.empty:
             for row_idx_raw, val in new_line_problems.items():
-                col_idx = df.columns.get_loc(col)
-                coord = f"列{get_excel_column_letter(col_idx + 1)} 行{row_idx_raw + 1}"
+                row_idx = row_idx_raw[0] if isinstance(row_idx_raw, tuple) else row_idx_raw
+                coord = f"列{get_excel_column_letter(col_idx + 1)} 行{row_idx + 1}"
                 display_val = str(val).replace("\n", "↵").replace("\r", "↵")
                 problem_cells.append(f"{coord}: '{display_val[:20]}...'")
-                if len(problem_cells) >= MAX_EXAMPLES:
-                    break
-        if len(problem_cells) >= MAX_EXAMPLES:
-            break
 
     if problem_cells:
-        return False, f"データ内部に改行が含まれています（例: {problem_cells}）"
+        problem_cells.sort(key=get_sort_key)
+        details = "\n- ".join(problem_cells)
+        return False, f"以下のセルでデータ内部に改行が含まれています:\n- {details}"
     return True, "データ内部に改行は含まれていません"
 
 
@@ -948,7 +1005,7 @@ def check_csv_fields_quoted(
 
     has_unquoted_comma = False
 
-    for line in content.splitlines()[:MAX_EXAMPLES]:
+    for line in content.splitlines():
         fields = line.split(",")
         if any(
             "," in field
