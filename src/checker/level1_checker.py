@@ -291,11 +291,11 @@ def detect_multiple_tables_dataframe(
                 if empty_rows[i] == empty_rows[i - 1] + 1:
                     current_group.append(empty_rows[i])
                 else:
-                    if len(current_group) >= 2:  # 2行以上の連続空行
+                    if len(current_group) >= 1:  # 1行以上の空行
                         consecutive_groups.append(current_group)
                     current_group = [empty_rows[i]]
 
-            if len(current_group) >= 2:
+            if len(current_group) >= 1:
                 consecutive_groups.append(current_group)
 
             if consecutive_groups:
